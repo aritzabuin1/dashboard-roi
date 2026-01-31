@@ -6,7 +6,7 @@ export async function POST(request: Request) {
     console.log("🟢 [Generate Link] Request received");
     try {
         const { email } = await request.json();
-        console.log("📧 Email:", email);
+        // console.log("📧 Email:", email); // REDACTED by Audit
 
         if (!email) {
             return NextResponse.json({ success: false, error: 'Email requerido' }, { status: 400 });
