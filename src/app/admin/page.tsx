@@ -407,6 +407,36 @@ export default function AdminPage() {
                                 </Button>
                             </div>
                         )}
+
+                        <div className="pt-4 border-t border-orange-200 dark:border-orange-800">
+                            <h4 className="text-sm font-medium text-orange-800 dark:text-orange-300 mb-2">Opción B: Forzar Contraseña (Definitivo)</h4>
+                            <div className="flex gap-4">
+                                <Button
+                                    variant="destructive"
+                                    onClick={async () => {
+                                        if (!toolEmail) return alert('Pon el email primero');
+                                        const newPass = prompt('Escribe la nueva contraseña para este usuario:');
+                                        if (!newPass) return;
+
+                                        setLoading(true);
+                                        try {
+                                            const res = await fetch('/api/admin/system-password-reset', {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({ email: toolEmail, password: newPass })
+                                            });
+                                            const d = await res.json();
+                                            if (d.success) alert('✅ Contraseña cambiada. Ahora inicia sesión normal con ella.');
+                                            else alert('Error: ' + d.error);
+                                        } catch (e) { alert('Error conexión'); }
+                                        setLoading(false);
+                                    }}
+                                    disabled={loading}
+                                >
+                                    Establecer Contraseña Manualmente
+                                </Button>
+                            </div>
+                        </div>
                     </CardContent>
                 </Card>
             </div>
