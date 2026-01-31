@@ -32,7 +32,7 @@ export default function AdminPage() {
     const [authenticated, setAuthenticated] = useState<boolean | null>(null)
     const [clients, setClients] = useState<Client[]>([])
     const [automations, setAutomations] = useState<Automation[]>([])
-    const [newClient, setNewClient] = useState({ name: '', email: '', password: '' })
+    const [newClient, setNewClient] = useState({ name: '', email: '' })
     const [newAutomation, setNewAutomation] = useState({ client_id: '', name: '', manual_duration_minutes: '', cost_per_hour: '' })
     const [loading, setLoading] = useState(false)
     const [copiedKey, setCopiedKey] = useState<string | null>(null)
@@ -89,7 +89,7 @@ export default function AdminPage() {
         })
         const data = await res.json()
         if (data.success) {
-            setNewClient({ name: '', email: '', password: '' })
+            setNewClient({ name: '', email: '' })
             fetchClients()
             if (data.message) {
                 setSuccessMessage(data.message)
@@ -176,7 +176,7 @@ export default function AdminPage() {
                                 ✅ {successMessage}
                             </div>
                         )}
-                        <form onSubmit={handleAddClient} className="grid gap-4 md:grid-cols-4">
+                        <form onSubmit={handleAddClient} className="grid gap-4 md:grid-cols-3">
                             <Input
                                 placeholder="Nombre del cliente *"
                                 value={newClient.name}
@@ -185,22 +185,16 @@ export default function AdminPage() {
                             />
                             <Input
                                 type="email"
-                                placeholder="Email (opcional)"
+                                placeholder="Email del cliente (para acceso dashboard)"
                                 value={newClient.email}
                                 onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
                             />
-                            <Input
-                                type="password"
-                                placeholder="Contraseña (opcional)"
-                                value={newClient.password}
-                                onChange={(e) => setNewClient({ ...newClient, password: e.target.value })}
-                            />
                             <Button type="submit" disabled={loading}>
-                                <Plus className="h-4 w-4 mr-2" /> Crear Cliente
+                                <Plus className="h-4 w-4 mr-2" /> {newClient.email ? 'Invitar Cliente' : 'Crear Cliente'}
                             </Button>
                         </form>
                         <p className="text-xs text-muted-foreground">
-                            💡 Si no proporcionas email, el cliente no podrá acceder al dashboard (solo webhook).
+                            📧 Si pones email, el cliente recibirá una invitación para crear su propia contraseña.
                         </p>
                     </CardContent>
                 </Card>

@@ -11,7 +11,7 @@ function generateApiKey() {
     return `sk_${randomBytes(16).toString('hex')}`;
 }
 
-// Lazy initialization of admin client (only when needed and when env is set)
+// Lazy initialization of admin client (only when needed)
 function getSupabaseAdmin() {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
         return null;
@@ -26,7 +26,7 @@ function getSupabaseAdmin() {
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { name, email, password } = body;
+        const { name, email } = body;
 
         if (!name) {
             return NextResponse.json(
@@ -37,30 +37,30 @@ export async function POST(request: Request) {
 
         const api_key = generateApiKey();
         let auth_user_id: string | null = null;
+        let inviteLink: string | null = null;
 
-        // If email is provided, create auth user for client access
+        // If email is provided, send invitation to client
         if (email) {
             const supabaseAdmin = getSupabaseAdmin();
 
             if (!supabaseAdmin) {
                 return NextResponse.json(
-                    { success: false, error: 'Server not configured for user creation. Add SUPABASE_SERVICE_ROLE_KEY to environment.' },
+                    { success: false, error: 'Server not configured for invitations. Add SUPABASE_SERVICE_ROLE_KEY.' },
                     { status: 500 }
                 );
             }
 
-            // Create user in Supabase Auth
-            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-                email,
-                password: password || randomBytes(12).toString('hex'),
-                email_confirm: true,
-                user_metadata: { client_name: name }
+            // Send magic link / invitation email
+            // The client will receive an email to set their password
+            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+                data: { client_name: name },
+                redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://dashboard-roi-neon.vercel.app'}/client/login`
             });
 
             if (authError) {
-                console.error('Error creating auth user:', authError);
+                console.error('Error inviting user:', authError);
                 return NextResponse.json(
-                    { success: false, error: `Auth error: ${authError.message}` },
+                    { success: false, error: `Invitation error: ${authError.message}` },
                     { status: 400 }
                 );
             }
@@ -99,8 +99,8 @@ export async function POST(request: Request) {
             success: true,
             client: data,
             message: email
-                ? `Cliente creado. Email: ${email}${password ? '' : ' (contraseña auto-generada)'}`
-                : 'Cliente creado sin acceso al dashboard.'
+                ? `✅ Invitación enviada a ${email}. El cliente recibirá un email para crear su contraseña.`
+                : 'Cliente creado (solo webhook, sin acceso dashboard).'
         });
 
     } catch (error) {

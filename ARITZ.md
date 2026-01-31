@@ -68,3 +68,75 @@ Para desplegar este proyecto a coste **CERO** y compartirlo con clientes, la mej
 
 ---
 **Resumen**: Un buen Arquitecto de IA no solo sabe de Prompts. Sabe de **Bases de Datos, APIs, Estructura y Costes**. La IA es el motor, pero la Nube es la carretera.
+
+---
+
+## 5. Autenticación Multi-Tenant Profesional
+
+### El Flujo Correcto de Invitación de Usuarios
+
+**❌ MAL (Anti-patrón)**: El admin crea usuario con contraseña → El admin comparte la contraseña al cliente.
+- Inseguro (la contraseña viaja en texto plano)
+- No profesional (el admin conoce las credenciales)
+- Problemas de responsabilidad
+
+**✅ BIEN (Patrón Profesional)**: El admin invita por email → El cliente crea su propia contraseña.
+- El admin solo necesita el email del cliente
+- El cliente recibe un email de invitación
+- El cliente elige su propia contraseña (nunca la ve el admin)
+
+### Implementación con Supabase Auth
+
+```typescript
+// ❌ MAL - El admin pone la contraseña
+await supabaseAdmin.auth.admin.createUser({
+  email,
+  password: passwordPuestasPorAdmin, // INSEGURO
+  email_confirm: true
+});
+
+// ✅ BIEN - Invitación por email
+await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+  redirectTo: 'https://tuapp.com/login'
+});
+// El cliente recibe email para crear su contraseña
+```
+
+### Arquitectura de Roles
+
+| Rol | Acceso | Autenticación |
+|-----|--------|---------------|
+| **Admin** | Panel `/admin`, ve todos los clientes | Password fijo en `.env` (simple) o Supabase Auth |
+| **Cliente** | Dashboard `/`, solo sus datos | Supabase Auth (email + contraseña propia) |
+
+### Service Role Key
+
+Para operaciones de admin (crear/invitar usuarios), necesitas la **Service Role Key**:
+
+1. **Dónde obtenerla**: Supabase → Settings → API → `service_role` (secreta)
+2. **NUNCA exponerla en frontend** (solo en variables de servidor)
+3. **Añadir a Vercel**: Environment Variables → `SUPABASE_SERVICE_ROLE_KEY`
+
+### RLS (Row Level Security) para Multi-Tenant
+
+Cada cliente debe ver **solo sus datos**:
+
+```sql
+-- El cliente autenticado solo ve sus propias ejecuciones
+CREATE POLICY "Clients see own data"
+ON executions FOR SELECT
+TO authenticated
+USING (
+  automation_id IN (
+    SELECT id FROM automation_metadata
+    WHERE client_id IN (
+      SELECT id FROM clients WHERE auth_user_id = auth.uid()
+    )
+  )
+);
+```
+
+### Lección Clave
+
+> La seguridad en SaaS multi-tenant no es opcional. El patrón de **"invitación por email + contraseña propia"** es el estándar de la industria. Nunca diseñes un sistema donde el admin conozca las contraseñas de los usuarios.
+
