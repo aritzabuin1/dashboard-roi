@@ -17,6 +17,7 @@ interface Client {
     name: string
     api_key: string
     created_at: string
+    auth_user_id: string | null
 }
 
 interface Automation {
@@ -31,10 +32,11 @@ export default function AdminPage() {
     const [authenticated, setAuthenticated] = useState<boolean | null>(null)
     const [clients, setClients] = useState<Client[]>([])
     const [automations, setAutomations] = useState<Automation[]>([])
-    const [newClientName, setNewClientName] = useState('')
+    const [newClient, setNewClient] = useState({ name: '', email: '', password: '' })
     const [newAutomation, setNewAutomation] = useState({ client_id: '', name: '', manual_duration_minutes: '', cost_per_hour: '' })
     const [loading, setLoading] = useState(false)
     const [copiedKey, setCopiedKey] = useState<string | null>(null)
+    const [successMessage, setSuccessMessage] = useState<string | null>(null)
     const router = useRouter()
 
     // Check authentication on load
@@ -77,17 +79,22 @@ export default function AdminPage() {
 
     async function handleAddClient(e: React.FormEvent) {
         e.preventDefault()
-        if (!newClientName.trim()) return
+        if (!newClient.name.trim()) return
         setLoading(true)
+        setSuccessMessage(null)
         const res = await fetch('/api/clients', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: newClientName })
+            body: JSON.stringify(newClient)
         })
         const data = await res.json()
         if (data.success) {
-            setNewClientName('')
+            setNewClient({ name: '', email: '', password: '' })
             fetchClients()
+            if (data.message) {
+                setSuccessMessage(data.message)
+                setTimeout(() => setSuccessMessage(null), 10000)
+            }
         } else {
             alert('Error: ' + data.error)
         }
@@ -161,20 +168,40 @@ export default function AdminPage() {
                 <Card>
                     <CardHeader>
                         <CardTitle>Añadir Cliente</CardTitle>
-                        <CardDescription>Crea un nuevo cliente y obtén su API Key automáticamente</CardDescription>
+                        <CardDescription>Crea un cliente con acceso al dashboard. El email y contraseña son para que el cliente pueda ver sus métricas.</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <form onSubmit={handleAddClient} className="flex gap-4">
+                    <CardContent className="space-y-4">
+                        {successMessage && (
+                            <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm">
+                                ✅ {successMessage}
+                            </div>
+                        )}
+                        <form onSubmit={handleAddClient} className="grid gap-4 md:grid-cols-4">
                             <Input
-                                placeholder="Nombre del cliente"
-                                value={newClientName}
-                                onChange={(e) => setNewClientName(e.target.value)}
-                                className="max-w-xs"
+                                placeholder="Nombre del cliente *"
+                                value={newClient.name}
+                                onChange={(e) => setNewClient({ ...newClient, name: e.target.value })}
+                                required
+                            />
+                            <Input
+                                type="email"
+                                placeholder="Email (opcional)"
+                                value={newClient.email}
+                                onChange={(e) => setNewClient({ ...newClient, email: e.target.value })}
+                            />
+                            <Input
+                                type="password"
+                                placeholder="Contraseña (opcional)"
+                                value={newClient.password}
+                                onChange={(e) => setNewClient({ ...newClient, password: e.target.value })}
                             />
                             <Button type="submit" disabled={loading}>
                                 <Plus className="h-4 w-4 mr-2" /> Crear Cliente
                             </Button>
                         </form>
+                        <p className="text-xs text-muted-foreground">
+                            💡 Si no proporcionas email, el cliente no podrá acceder al dashboard (solo webhook).
+                        </p>
                     </CardContent>
                 </Card>
 
@@ -188,6 +215,7 @@ export default function AdminPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Nombre</TableHead>
+                                    <TableHead>Acceso Dashboard</TableHead>
                                     <TableHead>API Key</TableHead>
                                     <TableHead>Creado</TableHead>
                                 </TableRow>
@@ -195,7 +223,7 @@ export default function AdminPage() {
                             <TableBody>
                                 {clients.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={3} className="text-center text-muted-foreground">
+                                        <TableCell colSpan={4} className="text-center text-muted-foreground">
                                             No hay clientes. Añade uno arriba.
                                         </TableCell>
                                     </TableRow>
@@ -203,6 +231,17 @@ export default function AdminPage() {
                                     clients.map((client) => (
                                         <TableRow key={client.id}>
                                             <TableCell className="font-medium">{client.name}</TableCell>
+                                            <TableCell>
+                                                {client.auth_user_id ? (
+                                                    <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
+                                                        ✓ Con acceso
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge variant="outline" className="text-slate-500">
+                                                        Solo webhook
+                                                    </Badge>
+                                                )}
+                                            </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
                                                     <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs">
