@@ -9,8 +9,8 @@ Esta guía explica cómo enviar datos desde tus automatizaciones (n8n, Make, etc
 Antes de conectar tus workflows, debes configurar el sistema desde el **Panel de Administración**.
 
 ### Acceso al Panel Admin
+- **Producción**: [https://dashboard-roi-neon.vercel.app/admin](https://dashboard-roi-neon.vercel.app/admin)
 - **Local**: [http://localhost:3000/admin](http://localhost:3000/admin)
-- **Producción**: `https://tudominio.com/admin`
 
 ### Crear un Cliente
 1. Ve al panel `/admin`.
@@ -32,7 +32,7 @@ Antes de conectar tus workflows, debes configurar el sistema desde el **Panel de
 ## 📡 Paso 2: Configurar el Webhook
 
 ### Endpoint
-**URL:** `https://tudominio.com/api/execution-webhook`  
+**URL:** `https://dashboard-roi-neon.vercel.app/api/execution-webhook`  
 **Método:** `POST`  
 **Headers:** `Content-Type: application/json`
 
@@ -61,7 +61,7 @@ Antes de conectar tus workflows, debes configurar el sistema desde el **Panel de
 
 1.  Añade un nodo **HTTP Request** al final de tu workflow (rama de éxito).
 2.  **Method**: POST.
-3.  **URL**: `https://tudominio.com/api/execution-webhook`.
+3.  **URL**: `https://dashboard-roi-neon.vercel.app/api/execution-webhook`.
 4.  **Body Content Type**: JSON.
 5.  **JSON Body**:
     ```json
@@ -77,7 +77,7 @@ Antes de conectar tus workflows, debes configurar el sistema desde el **Panel de
 ## 🟣 Paso 4: Integración en Make
 
 1.  Añade un módulo **HTTP / Make a request** al final de tu escenario.
-2.  **URL**: `https://tudominio.com/api/execution-webhook`.
+2.  **URL**: `https://dashboard-roi-neon.vercel.app/api/execution-webhook`.
 3.  **Method**: POST.
 4.  **Body Type**: Raw -> Content type: JSON (application/json).
 5.  **Request Content**:

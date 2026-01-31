@@ -6,6 +6,28 @@ export async function GET(request: Request) {
     try {
         const { searchParams } = new URL(request.url);
         const clientId = searchParams.get('clientId');
+        const range = searchParams.get('range') || '7d';
+
+        // Calculate date range
+        const now = new Date();
+        let startDate: Date;
+        let numDays: number;
+
+        switch (range) {
+            case '30d':
+                numDays = 30;
+                startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+                break;
+            case '365d':
+                numDays = 365;
+                startDate = new Date(now.getTime() - 365 * 24 * 60 * 60 * 1000);
+                break;
+            default: // '7d'
+                numDays = 7;
+                startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        }
+
+        const startDateISO = startDate.toISOString();
 
         // Build query for recent executions
         let recentQuery = supabase
@@ -22,10 +44,11 @@ export async function GET(request: Request) {
           client_id
         )
       `)
+            .gte('execution_timestamp', startDateISO)
             .order('execution_timestamp', { ascending: false })
-            .limit(10);
+            .limit(20);
 
-        // Build query for all executions (for stats)
+        // Build query for all executions in range (for stats)
         let allQuery = supabase
             .from('executions')
             .select(`
@@ -36,12 +59,13 @@ export async function GET(request: Request) {
           cost_per_hour,
           client_id
         )
-      `);
+      `)
+            .gte('execution_timestamp', startDateISO);
 
         const { data: recentExecutions, error: recentError } = await recentQuery;
         const { data: allExecutions, error: allError } = await allQuery;
 
-        if (recentError || allError || !allExecutions) {
+        if (recentError || allError) {
             return NextResponse.json({
                 success: false,
                 error: recentError?.message || allError?.message || 'No data'
@@ -83,35 +107,95 @@ export async function GET(request: Request) {
 
         const successRate = totalExecutions > 0 ? (successCount / totalExecutions) * 100 : 0;
 
-        // Prepare Trend Data (Last 7 days)
-        const today = new Date();
-        const last7Days = Array.from({ length: 7 }, (_, i) => {
-            const d = new Date();
-            d.setDate(today.getDate() - (6 - i));
-            return d.toISOString().split('T')[0];
-        });
+        // Prepare Trend Data based on range
+        let trendData: { date: string; savings: number }[] = [];
 
-        const trendData = last7Days.map(date => {
-            const dayExecutions = filteredAll.filter((e: any) =>
-                e.status === 'success' &&
-                new Date(e.execution_timestamp).toISOString().startsWith(date)
-            );
+        if (range === '365d') {
+            // Group by month for yearly view
+            const months = Array.from({ length: 12 }, (_, i) => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - (11 - i));
+                return d.toISOString().slice(0, 7); // YYYY-MM
+            });
 
-            const checkSavings = dayExecutions.reduce((acc: number, exec: any) => {
-                const meta = exec.automation_metadata;
-                const minutes = meta?.manual_duration_minutes || 0;
-                const rate = meta?.cost_per_hour || 0;
-                return acc + ((minutes / 60) * rate);
-            }, 0);
+            trendData = months.map(month => {
+                const monthExecutions = filteredAll.filter((e: any) =>
+                    e.status === 'success' &&
+                    e.execution_timestamp.startsWith(month)
+                );
 
-            return {
-                date: new Date(date).toLocaleDateString('es-ES', { weekday: 'short' }),
-                savings: Math.round(checkSavings * 100) / 100
-            };
-        });
+                const savings = monthExecutions.reduce((acc: number, exec: any) => {
+                    const meta = exec.automation_metadata;
+                    const minutes = meta?.manual_duration_minutes || 0;
+                    const rate = meta?.cost_per_hour || 0;
+                    return acc + ((minutes / 60) * rate);
+                }, 0);
+
+                return {
+                    date: new Date(month + '-01').toLocaleDateString('es-ES', { month: 'short' }),
+                    savings: Math.round(savings * 100) / 100
+                };
+            });
+        } else {
+            // Group by day for weekly/monthly view
+            const days = Array.from({ length: numDays }, (_, i) => {
+                const d = new Date();
+                d.setDate(now.getDate() - (numDays - 1 - i));
+                return d.toISOString().split('T')[0];
+            });
+
+            // For monthly, show weekly aggregates
+            if (range === '30d') {
+                const weeks = [0, 7, 14, 21, 28].map(offset => {
+                    const weekStart = new Date(now.getTime() - (28 - offset) * 24 * 60 * 60 * 1000);
+                    return weekStart.toISOString().split('T')[0];
+                });
+
+                trendData = weeks.slice(0, 4).map((weekStart, i) => {
+                    const weekEnd = weeks[i + 1] || now.toISOString().split('T')[0];
+                    const weekExecutions = filteredAll.filter((e: any) =>
+                        e.status === 'success' &&
+                        e.execution_timestamp >= weekStart &&
+                        e.execution_timestamp < weekEnd
+                    );
+
+                    const savings = weekExecutions.reduce((acc: number, exec: any) => {
+                        const meta = exec.automation_metadata;
+                        const minutes = meta?.manual_duration_minutes || 0;
+                        const rate = meta?.cost_per_hour || 0;
+                        return acc + ((minutes / 60) * rate);
+                    }, 0);
+
+                    return {
+                        date: `Sem ${i + 1}`,
+                        savings: Math.round(savings * 100) / 100
+                    };
+                });
+            } else {
+                // Daily for weekly
+                trendData = days.map(date => {
+                    const dayExecutions = filteredAll.filter((e: any) =>
+                        e.status === 'success' &&
+                        e.execution_timestamp.startsWith(date)
+                    );
+
+                    const savings = dayExecutions.reduce((acc: number, exec: any) => {
+                        const meta = exec.automation_metadata;
+                        const minutes = meta?.manual_duration_minutes || 0;
+                        const rate = meta?.cost_per_hour || 0;
+                        return acc + ((minutes / 60) * rate);
+                    }, 0);
+
+                    return {
+                        date: new Date(date).toLocaleDateString('es-ES', { weekday: 'short' }),
+                        savings: Math.round(savings * 100) / 100
+                    };
+                });
+            }
+        }
 
         // Format Recent Executions
-        const recentFormatted = filteredRecent.map((exec: any) => ({
+        const recentFormatted = filteredRecent.slice(0, 10).map((exec: any) => ({
             id: exec.id,
             automation_name: exec.automation_metadata?.name || 'Unknown',
             timestamp: exec.execution_timestamp,
@@ -121,10 +205,10 @@ export async function GET(request: Request) {
         return NextResponse.json({
             success: true,
             data: {
-                totalSaved: totalMoneySaved,
-                hoursSaved: totalMinutesSaved / 60,
+                totalSaved: Math.round(totalMoneySaved * 100) / 100,
+                hoursSaved: Math.round((totalMinutesSaved / 60) * 100) / 100,
                 executionCount: totalExecutions,
-                successRate,
+                successRate: Math.round(successRate * 10) / 10,
                 trendData,
                 recentExecutions: recentFormatted,
                 isDemo: false
