@@ -65,6 +65,16 @@ export default function DashboardPage() {
   // Check auth on load
   useEffect(() => {
     checkAuth()
+
+    // Safety net: Intercept password recovery flow landing on home
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        console.log('Recovery flow detected in Home, redirecting...')
+        router.push('/client/update-password')
+      }
+    })
+
+    return () => subscription.unsubscribe()
   }, [])
 
   // Refetch when client or range changes
@@ -174,7 +184,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
         <div className="text-center space-y-6">
-          <Image src="/logo.jpg" alt="AI-Mate" width={200} height={70} className="mx-auto" />
+          <Image src="/logo.jpg" alt="AI-Mate" width={200} height={70} className="h-12 w-auto mx-auto object-contain" priority quality={100} />
           <h1 className="text-2xl font-bold">Dashboard ROI</h1>
           <p className="text-slate-500">Accede para ver tus métricas de automatización</p>
           <div className="flex gap-4 justify-center">
@@ -199,18 +209,16 @@ export default function DashboardPage() {
       {/* Navbar */}
       <header className="border-b bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
         <div className="container mx-auto py-4 px-4 flex justify-between items-center">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-4">
             <Image
               src="/logo.jpg"
-              alt="AI-Mate Logo"
-              width={120}
-              height={40}
-              className="h-8 w-auto"
+              alt="AI-Mate"
+              width={180}
+              height={60}
+              className="h-10 w-auto object-contain"
               priority
+              quality={100}
             />
-            <span className="text-xs bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full text-slate-600 dark:text-slate-400">
-              ROI Dashboard
-            </span>
             {session.type === 'client' && (
               <Badge variant="secondary">{session.clientName}</Badge>
             )}
@@ -323,7 +331,7 @@ export default function DashboardPage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-7">
             <div className="col-span-4 md:col-span-4">
-              <TrendChart data={data.trendData} />
+              <TrendChart data={data.trendData} timeRange={timeRange} />
             </div>
             <div className="col-span-4 md:col-span-3">
               <TransparencyTable executions={data.recentExecutions} />

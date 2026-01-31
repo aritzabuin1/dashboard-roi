@@ -50,22 +50,64 @@ export async function POST(request: Request) {
                 );
             }
 
+            // Determine redirect URL
+            let redirectUrl = process.env.NEXT_PUBLIC_SITE_URL;
+
+            if (!redirectUrl && process.env.VERCEL_URL) {
+                redirectUrl = `https://${process.env.VERCEL_URL}`;
+            }
+
+            if (!redirectUrl) {
+                // HARDCODED FALLBACK FOR PRODUCTION
+                redirectUrl = 'https://dashboard-roi-aritzmore1-gmailcoms-projects.vercel.app';
+            }
+
             // Send magic link / invitation email
-            // The client will receive an email to set their password
+            // Point to Auth Callback to exchange code and redirect to login
             const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
                 data: { client_name: name },
-                redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://dashboard-roi-neon.vercel.app'}/client/login`
+                redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
             });
 
             if (authError) {
-                console.error('Error inviting user:', authError);
-                return NextResponse.json(
-                    { success: false, error: `Invitation error: ${authError.message}` },
-                    { status: 400 }
-                );
-            }
+                // Handle "User already registered" error gracefully
+                if (authError.message.includes('already been registered') || authError.status === 422) {
+                    console.log('User already exists, trying to link to existing user...');
+                    // Try to list users (searching by email would be better but listUsers is what we have standard)
+                    // Note: listUsers might not return all users if there are many, but for now this is a reasonable recovery
+                    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+                    const existingUser = listData.users.find(u => u.email === email);
 
-            auth_user_id = authData.user.id;
+                    if (existingUser) {
+                        auth_user_id = existingUser.id;
+                        console.log('User found, sending password recovery email...');
+
+                        // Send password reset email directly
+                        // Point to Auth Callback to exchange code and redirect to update-password
+                        const { error: resetError } = await supabaseAdmin.auth.resetPasswordForEmail(email, {
+                            redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
+                        });
+
+                        if (resetError) {
+                            console.error('Error sending reset email:', resetError);
+                            return NextResponse.json(
+                                { success: false, error: `Error enviando email recuperación: ${resetError.message}. Verifica límites de Supabase.` },
+                                { status: 429 }
+                            );
+                        }
+
+                    } else {
+                    }
+                } else {
+                    console.error('Error inviting user:', authError);
+                    return NextResponse.json(
+                        { success: false, error: `Error invitación: ${authError.message}` },
+                        { status: 400 }
+                    );
+                }
+            } else {
+                auth_user_id = authData.user.id;
+            }
         }
 
         // Create client record in database
@@ -99,7 +141,7 @@ export async function POST(request: Request) {
             success: true,
             client: data,
             message: email
-                ? `✅ Invitación enviada a ${email}. El cliente recibirá un email para crear su contraseña.`
+                ? `✅ Cliente reconectado. Se ha enviado un email de recuperación a ${email}.`
                 : 'Cliente creado (solo webhook, sin acceso dashboard).'
         });
 

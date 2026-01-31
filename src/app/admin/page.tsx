@@ -37,6 +37,11 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(false)
     const [copiedKey, setCopiedKey] = useState<string | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+    // Tools state
+    const [toolEmail, setToolEmail] = useState('')
+    const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+
     const router = useRouter()
 
     // Check authentication on load
@@ -343,6 +348,65 @@ export default function AdminPage() {
                                 )}
                             </TableBody>
                         </Table>
+                    </CardContent>
+                </Card>
+
+                {/* Emergency Tools */}
+                <Card className="border-orange-200 dark:border-orange-900">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-orange-700 dark:text-orange-400">
+                            🔧 Herramientas de Emergencia (Sin Email)
+                        </CardTitle>
+                        <CardDescription>
+                            Si el sistema de correos falla (Rate Limit excedido), usa esto para obtener el link manualmente y enviárselo al cliente por WhatsApp/Slack.
+                        </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <div className="flex gap-4">
+                            <Input
+                                placeholder="Email del cliente a recuperar"
+                                value={toolEmail}
+                                onChange={(e) => setToolEmail(e.target.value)}
+                            />
+                            <Button
+                                onClick={async () => {
+                                    if (!toolEmail) return;
+                                    setLoading(true);
+                                    try {
+                                        const res = await fetch('/api/admin/generate-link', {
+                                            method: 'POST',
+                                            headers: { 'Content-Type': 'application/json' },
+                                            body: JSON.stringify({ email: toolEmail })
+                                        });
+                                        const d = await res.json();
+                                        if (d.success) setGeneratedLink(d.link);
+                                        else alert('Error Servidor: ' + (d.error || JSON.stringify(d)));
+                                    } catch (e) {
+                                        console.error(e);
+                                        alert('Error crítico (Posible falta de SUPABASE_SERVICE_ROLE_KEY). Revisa Vercel.');
+                                    }
+                                    setLoading(false);
+                                }}
+                                disabled={loading}
+                            >
+                                Generar Link
+                            </Button>
+                        </div>
+                        {generatedLink && (
+                            <div className="p-4 bg-slate-100 dark:bg-slate-900 rounded-md break-all relative group">
+                                <p className="text-xs text-muted-foreground mb-1">Copia este link y ábrelo en incógnito:</p>
+                                <code className="text-sm font-mono text-blue-600 dark:text-blue-400">
+                                    {generatedLink}
+                                </code>
+                                <Button
+                                    size="sm"
+                                    className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                    onClick={() => copyToClipboard(generatedLink)}
+                                >
+                                    <Copy className="h-3 w-3" />
+                                </Button>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
             </div>

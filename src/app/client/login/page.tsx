@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -18,6 +18,11 @@ export default function ClientLoginPage() {
     const [loading, setLoading] = useState(false)
     const router = useRouter()
     const supabase = createClient()
+
+    useEffect(() => {
+        // Clear admin session to avoid conflicts
+        fetch('/api/admin/logout', { method: 'POST' })
+    }, [])
 
     async function handleSubmit(e: React.FormEvent) {
         e.preventDefault()
@@ -44,7 +49,7 @@ export default function ClientLoginPage() {
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
-                        <Image src="/logo.jpg" alt="AI-Mate" width={150} height={50} className="h-12 w-auto" />
+                        <Image src="/logo.jpg" alt="AI-Mate" width={200} height={70} className="h-12 w-auto mx-auto object-contain" priority quality={100} />
                     </div>
                     <div className="mx-auto w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
                         <Building2 className="h-6 w-6 text-slate-600 dark:text-slate-400" />
@@ -67,6 +72,11 @@ export default function ClientLoginPage() {
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
                         />
+                        <div className="text-right">
+                            <Link href="/client/forgot-password" className="text-xs text-slate-500 hover:text-primary">
+                                ¿Has olvidado tu contraseña?
+                            </Link>
+                        </div>
                         {error && (
                             <p className="text-sm text-red-500">{error}</p>
                         )}
