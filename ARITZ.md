@@ -140,3 +140,27 @@ USING (
 
 > La seguridad en SaaS multi-tenant no es opcional. El patrón de **"invitación por email + contraseña propia"** es el estándar de la industria. Nunca diseñes un sistema donde el admin conozca las contraseñas de los usuarios.
 
+## 6. Hardening Proactivo y Seguridad en Producción
+
+### El Mito de "El Email Siempre Llega"
+Confiar ciegamente en servicios de terceros (como el SMTP de Supabase) para procesos críticos (Login/Recuperación) es un error de novato.
+*   **Problema**: Rate Limits (30 emails/hora) o IP reputation mala pueden bloquear el acceso a TODA tu base de usuarios.
+*   **Solución (Patrón "God Mode")**: Implementar siempre **Herramientas de Emergencia en el Admin Panel** que permitan:
+    1.  Generar links de recuperación manualmente (Bypass SMTP).
+    2.  Forzar cambio de contraseña manualmente (Bypass Auth Tokens).
+    This ensures que como Admin/Soporte, NUNCA estás bloqueado por un proveedor externo.
+
+### Usuarios Huérfanos (Data Integrity)
+En sistemas desacoplados (Auth en Supabase vs Perfiles en tu DB `clients`):
+*   **Riesgo**: Se crea el Auth User pero falla el INSERT en `clients`. Resultado: El usuario puede loguearse pero la app explota o sale vacía.
+*   **Solución**: La API de creación (`/api/client`) debe ser **Idempotente y Reparadora**.
+    - Si detecta que el Auth User ya existe, no debe fallar, debe verificar si falta el perfil y crearlo ("Self-Healing").
+
+### Seguridad en Vercel
+*   **Service Role Key**: Es distinta de la Anon Key. Es CRÍTICA para que funcionen las APIs de administración (`/api/admin/*`).
+*   **Error Común**: Olvidar añadirla en Vercel > Settings > Env Vars provoca errores 500 silenciosos que el frontend interpreta como "Error de Conexión".
+*   **Debug**: En producción, asegúrate de que tus APIs devuelvan errores claros (sin exponer secretos) en lugar de morir silenciosamente.
+
+### Auditoría de Logs (PII)
+*   **Peligro**: Dejar `console.log(email)` o `console.log(user)` en producción viola GDPR y seguridad.
+*   **Regla**: Audita tu código buscando `console.log` antes de desplegar. Nunca loguees datos personales identificables (PII) en los logs del servidor.
