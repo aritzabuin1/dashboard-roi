@@ -25,14 +25,28 @@ export async function POST(request: Request) {
             );
         }
 
-        let isValid = false;
-
         if (adminPasswordHash) {
+            console.log("Debug Hash - Length:", adminPasswordHash.length);
+            console.log("Debug Hash - Start:", adminPasswordHash.substring(0, 4));
+            console.log("Debug Hash - End:", adminPasswordHash.substring(adminPasswordHash.length - 4));
+
+            // Checks for common copy-paste errors
+            if (adminPasswordHash.startsWith('"') || adminPasswordHash.startsWith("'")) {
+                console.error("CRITICAL: Hash has surrounding quotes!");
+            }
+            if (adminPasswordHash.includes(' ')) {
+                console.error("CRITICAL: Hash contains spaces!");
+            }
+
             // Secure path: compare with bcrypt hash
             isValid = await bcrypt.compare(password, adminPasswordHash);
             console.log("- Hash Compare Result:", isValid);
-        } else if (adminPasswordPlain) {
-            // Legacy path: plain text comparison (for backwards compat)
+        }
+
+        // Fallback: If hash failed (or missing) but plain text is set, try plain text
+        // This is a safety valve for migration issues
+        if (!isValid && adminPasswordPlain) {
+            console.log("Hash check failed or skipped. Attempting legacy plain text fallback.");
             isValid = password === adminPasswordPlain;
             console.log("- Plain Compare Result:", isValid);
         }
