@@ -1,6 +1,6 @@
 
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { rateLimit } from '@/lib/rate-limit';
 
 // Rate limit config: 100 requests per minute per API key
@@ -9,9 +9,21 @@ const RATE_LIMIT_CONFIG = {
     windowMs: 60 * 1000 // 1 minute
 };
 
+// Admin Client (Service Role) - REQUIRED for bypassing RLS during webhook ingestion
+function getSupabaseAdmin() {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+    }
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+}
+
 // Helper to validate API Key
-async function getClientByApiKey(apiKey: string) {
-    const { data, error } = await supabase
+async function getClientByApiKey(supabaseAdmin: any, apiKey: string) {
+    const { data, error } = await supabaseAdmin
         .from('clients')
         .select('id, name')
         .eq('api_key', apiKey)
@@ -22,9 +34,9 @@ async function getClientByApiKey(apiKey: string) {
 }
 
 // Helper to get or create Automation Metadata
-async function getAutomationId(clientId: string, automationName: string) {
+async function getAutomationId(supabaseAdmin: any, clientId: string, automationName: string) {
     // 1. Try to find existing
-    const { data, error } = await supabase
+    const { data, error } = await supabaseAdmin
         .from('automation_metadata')
         .select('id')
         .eq('client_id', clientId)
@@ -34,7 +46,7 @@ async function getAutomationId(clientId: string, automationName: string) {
     if (data) return data.id;
 
     // 2. Auto-create with 0 values so data isn't lost
-    const { data: newData, error: createError } = await supabase
+    const { data: newData, error: createError } = await supabaseAdmin
         .from('automation_metadata')
         .insert({
             client_id: clientId,
@@ -65,6 +77,9 @@ export async function POST(request: Request) {
             );
         }
 
+        // Initialize Admin Client
+        const supabaseAdmin = getSupabaseAdmin();
+
         // 2. Rate Limiting (by API key)
         const rateLimitResult = rateLimit(`webhook:${api_key}`, RATE_LIMIT_CONFIG);
         if (!rateLimitResult.success) {
@@ -85,7 +100,7 @@ export async function POST(request: Request) {
         }
 
         // 3. Auth
-        const client = await getClientByApiKey(api_key);
+        const client = await getClientByApiKey(supabaseAdmin, api_key);
         if (!client) {
             return NextResponse.json(
                 { success: false, error: 'Invalid API Key' },
@@ -94,7 +109,7 @@ export async function POST(request: Request) {
         }
 
         // 4. Automation Lookup/Create
-        const automationId = await getAutomationId(client.id, automation_name);
+        const automationId = await getAutomationId(supabaseAdmin, client.id, automation_name);
         if (!automationId) {
             return NextResponse.json(
                 { success: false, error: 'Failed to find or create automation metadata' },
@@ -103,7 +118,7 @@ export async function POST(request: Request) {
         }
 
         // 5. Record Execution
-        const { error: insertError } = await supabase
+        const { error: insertError } = await supabaseAdmin
             .from('executions')
             .insert({
                 automation_id: automationId,

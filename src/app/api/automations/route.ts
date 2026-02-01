@@ -45,6 +45,10 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+    // Require admin authentication
+    const auth = await requireAdmin();
+    if (!auth.authenticated) return auth.response;
+
     try {
         const { data, error } = await supabase
             .from('automation_metadata')

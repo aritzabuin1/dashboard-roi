@@ -221,3 +221,37 @@ export async function POST(request: Request) {
 - [ ] ¿No hay `console.log(email)` ni datos PII en logs?
 
 > **Lección Final**: La seguridad no es "opcional cuando tengamos tiempo". Cada proyecto que sale a producción sin JWT firmados, con tokens base64, o exponiendo API keys en GET públicos es una bomba de tiempo. Arréglalo ANTES de tener usuarios reales.
+
+## 8. Arquitectura de Datos Segura (RLS y Context-Aware Clients)
+
+Hemos implementado un nivel superior de seguridad llamado **Row Level Security (RLS)**. Esto significa que la base de datos es la que decide quién ve qué, no el código del frontend.
+
+### El Reto del Doble Contexto
+Nuestro dashboard tiene dos tipos de usuarios con autenticaciones radicalmente distintas:
+1.  **Clientes**: Usan **Supabase Auth** (User ID estándar). RLS funciona nativamente.
+2.  **Admins**: Usan nuestro sistema custom de **JWT**. Para Supabase son "Anónimos".
+
+### La Solución: Cliente Supabase Camaleónico
+En `/api/metrics`, el código se comporta diferente según quién llame:
+
+```typescript
+let supabase;
+if (isAdmin) {
+    // 👑 Modo Admin: Usa Service Role Key
+    // Bypasea RLS. Ve todos los datos.
+    supabase = createServiceClient(SERVICE_ROLE_KEY);
+} else {
+    // 👤 Modo Cliente: Usa SSR Client (Cookies)
+    // Respeta RLS. Solo ve SUS datos.
+    supabase = await createSSRClient(); 
+}
+```
+
+### Políticas RLS "Zero Trust"
+Nuestras nuevas políticas (`rls_policies_v2.sql`) son paranoicas por defecto:
+*   **Anon**: No puede hacer nada (ni SELECT ni INSERT).
+*   **Authenticated**: Solo ve filas donde `client_id` coincida con su `auth.uid()`.
+*   **Webhook**: Inyecta datos usando `SERVICE_ROLE`, única forma de escribir en la DB desde fuera.
+
+**Lección**: No basta con ocultar endpoints. La seguridad real está en la base de datos. Si un hacker lograra saltarse el API y atacar la DB directamente, RLS lo detendría porque "no es dueño de los datos".
+
