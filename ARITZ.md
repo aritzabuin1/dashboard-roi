@@ -106,7 +106,7 @@ await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
 
 | Rol | Acceso | Autenticación |
 |-----|--------|---------------|
-| **Admin** | Panel `/admin`, ve todos los clientes | Password fijo en `.env` (simple) o Supabase Auth |
+| **Admin** | Panel `/admin`, ve todos los clientes | JWT firmado + contraseña hasheada |
 | **Cliente** | Dashboard `/`, solo sus datos | Supabase Auth (email + contraseña propia) |
 
 ### Service Role Key
@@ -164,3 +164,60 @@ En sistemas desacoplados (Auth en Supabase vs Perfiles en tu DB `clients`):
 ### Auditoría de Logs (PII)
 *   **Peligro**: Dejar `console.log(email)` o `console.log(user)` en producción viola GDPR y seguridad.
 *   **Regla**: Audita tu código buscando `console.log` antes de desplegar. Nunca loguees datos personales identificables (PII) en los logs del servidor.
+
+## 7. Seguridad de Tokens y Autenticación de Admin (CRÍTICO)
+
+### El Error Fatal: Tokens Falsiﬁcables
+**❌ MAL (Lo que teníamos antes)**:
+```typescript
+// Token que cualquier hacker puede crear
+const token = Buffer.from(`admin:${Date.now()}`).toString('base64');
+```
+Problema: Un atacante solo tiene que generar `btoa("admin:123456789")` y ya tiene acceso admin.
+
+**✅ BIEN (Lo que tenemos ahora)**:
+```typescript
+// Token JWT firmado con secreto del servidor
+import { SignJWT } from 'jose';
+const token = await new SignJWT({ role: 'admin' })
+    .setProtectedHeader({ alg: 'HS256' })
+    .setExpirationTime('24h')
+    .sign(JWT_SECRET);
+```
+Sin conocer `JWT_SECRET`, es imposible falsificar el token.
+
+### Patrón de Middleware para Proteger Endpoints
+Crear un helper `requireAdmin()` que:
+1. Lee la cookie de sesión
+2. Verifica el JWT
+3. Devuelve 401 si no es válido
+
+```typescript
+// En cada endpoint admin:
+export async function POST(request: Request) {
+    const auth = await requireAdmin();
+    if (!auth.authenticated) return auth.response;
+    
+    // ... resto del código protegido
+}
+```
+
+### API Keys: Nunca Exponer en GET Públicos
+**❌ MAL**: `/api/clients` devuelve `{ id, name, api_key }` a cualquiera.
+**✅ BIEN**: `/api/clients` devuelve `{ id, name }`. Para ver la key hay un endpoint separado `/api/clients/[id]/key` que require admin auth.
+
+### Variables de Entorno Obligatorias para Producción
+| Variable | Propósito | Cómo Generar |
+|----------|-----------|--------------|
+| `JWT_SECRET` | Firmar tokens admin | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
+| `SUPABASE_SERVICE_ROLE_KEY` | Operaciones admin DB | Supabase Dashboard → Settings → API |
+| `ADMIN_PASSWORD` | Login admin (mínimo) | Elegir contraseña fuerte |
+
+### Checklist de Seguridad Pre-Deploy
+- [ ] ¿Usas JWT en lugar de base64 para sesiones?
+- [ ] ¿Todos los endpoints `/api/admin/*` tienen `requireAdmin()`?
+- [ ] ¿Las API keys están ocultas en GET responses?
+- [ ] ¿`JWT_SECRET` está en Vercel Environment Variables?
+- [ ] ¿No hay `console.log(email)` ni datos PII en logs?
+
+> **Lección Final**: La seguridad no es "opcional cuando tengamos tiempo". Cada proyecto que sale a producción sin JWT firmados, con tokens base64, o exponiendo API keys en GET públicos es una bomba de tiempo. Arréglalo ANTES de tener usuarios reales.
