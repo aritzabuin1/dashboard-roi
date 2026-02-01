@@ -12,7 +12,13 @@ export async function POST(request: Request) {
         const adminPasswordHash = process.env.ADMIN_PASSWORD_HASH;
         const adminPasswordPlain = process.env.ADMIN_PASSWORD;
 
+        console.log("Login Debug [Safe]:");
+        console.log("- Hash Configured:", !!adminPasswordHash);
+        console.log("- Plain Configured:", !!adminPasswordPlain);
+        console.log("- Password received length:", password?.length);
+
         if (!adminPasswordHash && !adminPasswordPlain) {
+            console.error("No admin password configured");
             return NextResponse.json(
                 { success: false, error: 'Admin password not configured' },
                 { status: 500 }
@@ -24,9 +30,11 @@ export async function POST(request: Request) {
         if (adminPasswordHash) {
             // Secure path: compare with bcrypt hash
             isValid = await bcrypt.compare(password, adminPasswordHash);
+            console.log("- Hash Compare Result:", isValid);
         } else if (adminPasswordPlain) {
             // Legacy path: plain text comparison (for backwards compat)
             isValid = password === adminPasswordPlain;
+            console.log("- Plain Compare Result:", isValid);
         }
 
         if (!isValid) {
