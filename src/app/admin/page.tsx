@@ -15,7 +15,6 @@ import Link from "next/link"
 interface Client {
     id: string
     name: string
-    api_key: string
     created_at: string
     auth_user_id: string | null
 }
@@ -41,6 +40,7 @@ export default function AdminPage() {
     // Tools state
     const [toolEmail, setToolEmail] = useState('')
     const [generatedLink, setGeneratedLink] = useState<string | null>(null)
+    const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({})
 
     const router = useRouter()
 
@@ -243,20 +243,48 @@ export default function AdminPage() {
                                             </TableCell>
                                             <TableCell>
                                                 <div className="flex items-center gap-2">
-                                                    <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs">
-                                                        {client.api_key.slice(0, 10)}...
-                                                    </code>
-                                                    <Button
-                                                        variant="ghost"
-                                                        size="icon"
-                                                        onClick={() => copyToClipboard(client.api_key)}
-                                                    >
-                                                        {copiedKey === client.api_key ? (
-                                                            <Check className="h-4 w-4 text-green-500" />
-                                                        ) : (
-                                                            <Copy className="h-4 w-4" />
-                                                        )}
-                                                    </Button>
+                                                    {revealedKeys[client.id] ? (
+                                                        <>
+                                                            <code className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-xs">
+                                                                {revealedKeys[client.id]}
+                                                            </code>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                onClick={() => {
+                                                                    navigator.clipboard.writeText(revealedKeys[client.id]);
+                                                                    setCopiedKey(client.id);
+                                                                    setTimeout(() => setCopiedKey(null), 2000);
+                                                                }}
+                                                            >
+                                                                {copiedKey === client.id ? (
+                                                                    <Check className="h-4 w-4 text-green-500" />
+                                                                ) : (
+                                                                    <Copy className="h-4 w-4" />
+                                                                )}
+                                                            </Button>
+                                                        </>
+                                                    ) : (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={async () => {
+                                                                try {
+                                                                    const res = await fetch(`/api/clients/${client.id}/key`);
+                                                                    const data = await res.json();
+                                                                    if (data.success) {
+                                                                        setRevealedKeys(prev => ({ ...prev, [client.id]: data.api_key }));
+                                                                    } else {
+                                                                        alert('Error: ' + data.error);
+                                                                    }
+                                                                } catch (err) {
+                                                                    alert('Error fetching API key');
+                                                                }
+                                                            }}
+                                                        >
+                                                            🔑 Revelar Key
+                                                        </Button>
+                                                    )}
                                                 </div>
                                             </TableCell>
                                             <TableCell>{new Date(client.created_at).toLocaleDateString()}</TableCell>

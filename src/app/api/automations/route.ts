@@ -1,8 +1,13 @@
 
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
+import { requireAdmin } from '@/lib/require-admin';
 
 export async function POST(request: Request) {
+    // Require admin authentication
+    const auth = await requireAdmin();
+    if (!auth.authenticated) return auth.response;
+
     try {
         const body = await request.json();
         const { client_id, name, manual_duration_minutes, cost_per_hour } = body;

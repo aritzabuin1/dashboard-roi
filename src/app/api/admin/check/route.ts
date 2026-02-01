@@ -1,24 +1,8 @@
 
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { isAdminAuthenticated } from '@/lib/auth-admin';
 
 export async function GET() {
-    const cookieStore = await cookies();
-    const session = cookieStore.get('admin_session');
-
-    if (!session || !session.value) {
-        return NextResponse.json({ authenticated: false });
-    }
-
-    // Verify the session token format
-    try {
-        const decoded = Buffer.from(session.value, 'base64').toString();
-        if (decoded.startsWith('admin:')) {
-            return NextResponse.json({ authenticated: true });
-        }
-    } catch {
-        // Invalid token format
-    }
-
-    return NextResponse.json({ authenticated: false });
+    const authenticated = await isAdminAuthenticated();
+    return NextResponse.json({ authenticated });
 }

@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
+import { requireAdmin } from '@/lib/require-admin';
 
 // Regular client for database operations
 import { supabase } from '@/lib/supabase';
@@ -24,6 +25,10 @@ function getSupabaseAdmin() {
 }
 
 export async function POST(request: Request) {
+    // Require admin authentication
+    const auth = await requireAdmin();
+    if (!auth.authenticated) return auth.response;
+
     try {
         const body = await request.json();
         const { name, email } = body;
@@ -153,10 +158,14 @@ export async function POST(request: Request) {
 }
 
 export async function GET() {
+    // Require admin authentication to list clients
+    const auth = await requireAdmin();
+    if (!auth.authenticated) return auth.response;
+
     try {
         const { data, error } = await supabase
             .from('clients')
-            .select('id, name, api_key, created_at, auth_user_id')
+            .select('id, name, created_at, auth_user_id') // api_key removed for security
             .order('created_at', { ascending: false });
 
         if (error) {
