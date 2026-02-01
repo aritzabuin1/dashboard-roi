@@ -25,6 +25,8 @@ export async function POST(request: Request) {
             );
         }
 
+        let isValid = false;
+
         if (adminPasswordHash) {
             console.log("Debug Hash - Length:", adminPasswordHash.length);
             console.log("Debug Hash - Start:", adminPasswordHash.substring(0, 4));
