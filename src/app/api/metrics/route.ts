@@ -1,7 +1,7 @@
 
 import { NextResponse } from 'next/server';
 import { createClient as createSSRClient } from '@/lib/supabase-server';
-import { createClient as createServiceClient } from '@supabase/supabase-js';
+import { createClient as createServiceClient, SupabaseClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/require-admin';
 
 // Helper to get Service Role Client (for Admin)
@@ -23,7 +23,7 @@ export async function GET(request: Request) {
         const range = searchParams.get('range') || '7d';
 
         // 1. Determine Context (Admin vs Client)
-        let supabase;
+        let supabase: SupabaseClient;
         const adminAuth = await requireAdmin();
 
         if (adminAuth.authenticated) {
