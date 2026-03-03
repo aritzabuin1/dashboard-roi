@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect } from 'react'
@@ -10,6 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Building2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import Image from "next/image"
+import { Logo } from "@/components/logo"
 
 export default function ClientLoginPage() {
     const [email, setEmail] = useState('')
@@ -49,7 +49,7 @@ export default function ClientLoginPage() {
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
-                        <Image src="/logo.jpg" alt="AI-Mate" width={200} height={70} className="h-12 w-auto mx-auto object-contain" priority quality={100} />
+                        <Logo className="justify-center" iconSize={40} textSize="text-3xl" />
                     </div>
                     <div className="mx-auto w-12 h-12 bg-slate-100 dark:bg-slate-800 rounded-full flex items-center justify-center mb-4">
                         <Building2 className="h-6 w-6 text-slate-600 dark:text-slate-400" />

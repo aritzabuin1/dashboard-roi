@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "audit:security": "bash scripts/security-audit.sh",
+    "audit:report": "node scripts/generate-audit-report.js",
+    "audit:full": "npm run audit:security && npm run audit:report"
   },
   "dependencies": {
     "@radix-ui/react-separator": "^1.1.8",

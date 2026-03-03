@@ -2,9 +2,13 @@
 import { SignJWT, jwtVerify } from 'jose';
 import { cookies } from 'next/headers';
 
-const JWT_SECRET = new TextEncoder().encode(
-    process.env.JWT_SECRET || 'fallback-dev-secret-change-in-production'
-);
+function getJwtSecret(): Uint8Array {
+    const secret = process.env.JWT_SECRET;
+    if (!secret) {
+        throw new Error('JWT_SECRET environment variable is not configured. Set it in Vercel or .env.local');
+    }
+    return new TextEncoder().encode(secret);
+}
 
 const COOKIE_NAME = 'admin_session';
 
@@ -22,7 +26,7 @@ export async function signAdminToken(): Promise<string> {
         .setProtectedHeader({ alg: 'HS256' })
         .setIssuedAt()
         .setExpirationTime('24h')
-        .sign(JWT_SECRET);
+        .sign(getJwtSecret());
 
     return token;
 }
@@ -33,7 +37,7 @@ export async function signAdminToken(): Promise<string> {
  */
 export async function verifyAdminToken(token: string): Promise<AdminTokenPayload | null> {
     try {
-        const { payload } = await jwtVerify(token, JWT_SECRET);
+        const { payload } = await jwtVerify(token, getJwtSecret());
 
         if (payload.role !== 'admin') {
             return null;

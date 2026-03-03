@@ -1,7 +1,18 @@
 
 import { NextResponse } from 'next/server';
 import { requireAdmin } from '@/lib/require-admin';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
+
+function getSupabaseAdmin() {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+    }
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+}
 
 interface RouteParams {
     params: Promise<{ id: string }>;
@@ -27,7 +38,8 @@ export async function GET(request: Request, { params }: RouteParams) {
     }
 
     try {
-        const { data, error } = await supabase
+        const supabaseAdmin = getSupabaseAdmin();
+        const { data, error } = await supabaseAdmin
             .from('clients')
             .select('api_key')
             .eq('id', id)

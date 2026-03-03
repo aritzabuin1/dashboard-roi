@@ -2,28 +2,24 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/require-admin';
+import { apiError } from '@/lib/api-errors';
 
 export async function POST(request: Request) {
     // Require admin authentication
     const auth = await requireAdmin();
     if (!auth.authenticated) return auth.response;
 
-    console.log("🟢 [Generate Link] Request received");
     try {
         const { email } = await request.json();
-        // console.log("📧 Email:", email); // REDACTED by Audit
 
         if (!email) {
             return NextResponse.json({ success: false, error: 'Email requerido' }, { status: 400 });
         }
 
         const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-        // Log key presence safely (don't log full key)
-        console.log("🔑 Service Key Present:", !!key, "Length:", key?.length);
-
         if (!key) {
-            console.error("❌ FALTAL: No SUPABASE_SERVICE_ROLE_KEY environment variable found");
-            return NextResponse.json({ success: false, error: 'Falta SUPABASE_SERVICE_ROLE_KEY en servidor (Environment Variable missing)' }, { status: 500 });
+            console.error('[generate-link] SUPABASE_SERVICE_ROLE_KEY not set');
+            return apiError(500, 'SUPABASE_SERVICE_ROLE_KEY no configurado');
         }
 
         const supabaseAdmin = createClient(
@@ -38,9 +34,9 @@ export async function POST(request: Request) {
             redirectUrl = `https://${process.env.VERCEL_URL}`;
         }
         if (!redirectUrl) {
-            redirectUrl = 'https://dashboard-roi-aritzmore1-gmailcoms-projects.vercel.app';
+            console.error('[generate-link] NEXT_PUBLIC_SITE_URL not configured');
+            return apiError(500, 'NEXT_PUBLIC_SITE_URL no configurado');
         }
-        console.log("🔗 Redirect URL:", redirectUrl);
 
         // Generate the link
         const { data, error } = await supabaseAdmin.auth.admin.generateLink({
@@ -52,22 +48,18 @@ export async function POST(request: Request) {
         });
 
         if (error) {
-            console.error('❌ Supabase Error:', error);
-            // Return the specific error message to the frontend
+            console.error('[generate-link] Supabase error:', error);
+            // Admin-only route — Supabase message is useful for troubleshooting
             return NextResponse.json({ success: false, error: `Supabase: ${error.message}` }, { status: 400 });
         }
 
-        console.log("✅ Success! Link generated.");
         return NextResponse.json({
             success: true,
             link: data.properties.action_link
         });
 
     } catch (error: any) {
-        console.error('💥 Crash Error:', error);
-        return NextResponse.json({
-            success: false,
-            error: `Excepción: ${error.message || JSON.stringify(error)}`
-        }, { status: 500 });
+        console.error('[generate-link] Crash:', error);
+        return apiError(500);
     }
 }

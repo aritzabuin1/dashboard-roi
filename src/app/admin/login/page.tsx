@@ -55,6 +55,7 @@ export default function AdminLoginPage() {
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <Input
                             type="password"
+                            name="password"
                             placeholder="Contraseña"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}

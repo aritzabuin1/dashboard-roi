@@ -2,6 +2,7 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/require-admin';
+import { apiError } from '@/lib/api-errors';
 
 export async function POST(request: Request) {
     // Require admin authentication
@@ -54,7 +55,7 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: true, message: 'Contraseña actualizada correctamente' });
 
     } catch (error: any) {
-        console.error('Manual password reset error:', error);
-        return NextResponse.json({ success: false, error: error.message || 'Error interno' }, { status: 500 });
+        console.error('[system-password-reset] Error:', error);
+        return apiError(500);
     }
 }

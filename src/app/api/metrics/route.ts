@@ -182,17 +182,20 @@ export async function GET(request: Request) {
         // If map is empty (no executions), ensure we return at least empty array
 
         return NextResponse.json({
-            totalSaved,
-            hoursSaved,
-            executionCount: totalExecutions,
-            successRate,
-            trendData,
-            recentExecutions: recentExecutions?.map((e: any) => ({
-                id: e.id,
-                automation_name: e.automation_metadata?.name || 'Unknown',
-                timestamp: e.execution_timestamp,
-                status: e.status
-            })) || []
+            success: true,
+            data: {
+                totalSaved,
+                hoursSaved,
+                executionCount: totalExecutions,
+                successRate,
+                trendData,
+                recentExecutions: recentExecutions?.map((e: any) => ({
+                    id: e.id,
+                    automation_name: e.automation_metadata?.name || 'Unknown',
+                    timestamp: e.execution_timestamp,
+                    status: e.status
+                })) || []
+            }
         });
 
     } catch (error: any) {

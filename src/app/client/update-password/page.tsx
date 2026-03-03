@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import Image from 'next/image'
+import { Logo } from "@/components/logo"
 
 export default function UpdatePasswordPage() {
     const [password, setPassword] = useState('')
@@ -53,7 +53,7 @@ export default function UpdatePasswordPage() {
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
-                        <Image src="/logo.jpg" alt="AI-Mate" width={200} height={70} className="h-12 w-auto mx-auto object-contain" priority quality={100} />
+                        <Logo className="justify-center" iconSize={40} textSize="text-3xl" />
                     </div>
                     <CardTitle>Establecer Nueva Contraseña</CardTitle>
                     <CardDescription>Introduce tu nueva contraseña para acceder al dashboard</CardDescription>

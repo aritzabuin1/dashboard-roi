@@ -255,3 +255,65 @@ Nuestras nuevas políticas (`rls_policies_v2.sql`) son paranoicas por defecto:
 
 **Lección**: No basta con ocultar endpoints. La seguridad real está en la base de datos. Si un hacker lograra saltarse el API y atacar la DB directamente, RLS lo detendría porque "no es dueño de los datos".
 
+### 🔑 Matriz de Decisión: ¿Qué Cliente Supabase Usar?
+
+Esta tabla es la **referencia definitiva** para elegir el cliente correcto en cada endpoint API:
+
+| Endpoint | Protección | Cliente | ¿RLS activo? | Justificación |
+|----------|------------|---------|--------------|---------------|
+| `GET /api/clients` | `requireAdmin()` | **Service Role** | ❌ Bypassea | Admin necesita ver TODOS los clientes |
+| `POST /api/clients` | `requireAdmin()` | **Service Role** | ❌ Bypassea | Admin crea clientes para otros |
+| `GET /api/metrics` (Admin) | `requireAdmin()` | **Service Role** | ❌ Bypassea | Admin ve métricas globales |
+| `GET /api/metrics` (Cliente) | Cookie Supabase | **SSR Client** | ✅ Aplica | Cliente solo ve SUS métricas |
+| `POST /api/execution-webhook` | API Key validation | **Service Role** | ❌ Bypassea | Webhook es sistema externo confiable |
+| `GET /api/automations` | `requireAdmin()` | **Service Role** | ❌ Bypassea | Admin gestiona automatizaciones |
+| `POST /api/automations` | `requireAdmin()` | **Service Role** | ❌ Bypassea | Admin crea automatizaciones |
+
+### ⚠️ Errores Comunes a Evitar
+
+1. **Usar `supabase` (Anon Key) en endpoints Admin**
+   - ❌ MAL: `import { supabase } from '@/lib/supabase'` en `/api/clients`
+   - ✅ BIEN: Usar `getSupabaseAdmin()` (Service Role) después de `requireAdmin()`
+
+2. **Pensar que Service Role es "inseguro"**
+   - Service Role es la forma OFICIAL de bypassar RLS para operaciones de backend confiables
+   - La seguridad viene de `requireAdmin()` o API Key validation ANTES de usarlo
+
+3. **Olvidar que Admin no tiene `auth.uid()`**
+   - Admin usa JWT custom, no Supabase Auth
+   - RLS con `auth.uid()` siempre falla para Admin → usar Service Role
+
+### Diagrama de Flujo de Seguridad
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                       PETICIÓN ENTRANTE                         │
+└──────────────────────────────┬──────────────────────────────────┘
+                               │
+                               ▼
+              ┌────────────────────────────────┐
+              │  ¿Es endpoint de Admin?        │
+              │  (/api/clients, /api/admin/*)  │
+              └────────────────┬───────────────┘
+                               │
+            ┌──────────────────┴──────────────────┐
+            │ SÍ                                  │ NO
+            ▼                                     ▼
+   ┌─────────────────┐                  ┌─────────────────┐
+   │ requireAdmin()  │                  │ ¿Es Webhook?    │
+   │ ¿JWT válido?    │                  └────────┬────────┘
+   └────────┬────────┘                           │
+            │                       ┌────────────┴────────────┐
+       ┌────┴────┐                  │ SÍ                      │ NO
+       │SÍ      NO│                 ▼                         ▼
+       ▼          ▼         ┌──────────────┐         ┌──────────────────┐
+  Service    401 Error      │ API Key OK?  │         │ Cookie Supabase? │
+   Role                     └──────┬───────┘         └────────┬─────────┘
+  (bypass                          │                          │
+   RLS)                  ┌─────────┴─────────┐      ┌─────────┴─────────┐
+                         │SÍ                 NO│    │SÍ                 NO│
+                         ▼                    ▼     ▼                    ▼
+                    Service Role         401 Error SSR Client        401 Error
+                    (bypass RLS)                   (RLS aplica)
+```
+

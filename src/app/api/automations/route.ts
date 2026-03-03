@@ -1,7 +1,19 @@
 
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/require-admin';
+
+// Get Service Role client (bypasses RLS for admin operations)
+function getSupabaseAdmin() {
+    if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+        throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+    }
+    return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.SUPABASE_SERVICE_ROLE_KEY,
+        { auth: { autoRefreshToken: false, persistSession: false } }
+    );
+}
 
 export async function POST(request: Request) {
     // Require admin authentication
@@ -19,7 +31,9 @@ export async function POST(request: Request) {
             );
         }
 
-        const { data, error } = await supabase
+        const supabaseAdmin = getSupabaseAdmin();
+
+        const { data, error } = await supabaseAdmin
             .from('automation_metadata')
             .insert({ client_id, name, manual_duration_minutes, cost_per_hour })
             .select()
@@ -50,7 +64,9 @@ export async function GET() {
     if (!auth.authenticated) return auth.response;
 
     try {
-        const { data, error } = await supabase
+        const supabaseAdmin = getSupabaseAdmin();
+
+        const { data, error } = await supabaseAdmin
             .from('automation_metadata')
             .select(`
         id, 

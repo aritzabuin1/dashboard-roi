@@ -63,8 +63,10 @@ export async function POST(request: Request) {
             }
 
             if (!redirectUrl) {
-                // HARDCODED FALLBACK FOR PRODUCTION
-                redirectUrl = 'https://dashboard-roi-aritzmore1-gmailcoms-projects.vercel.app';
+                return NextResponse.json(
+                    { success: false, error: 'NEXT_PUBLIC_SITE_URL no está configurado. Añádelo en Vercel > Settings > Environment Variables.' },
+                    { status: 500 }
+                );
             }
 
             // Send magic link / invitation email
@@ -77,7 +79,6 @@ export async function POST(request: Request) {
             if (authError) {
                 // Handle "User already registered" error gracefully
                 if (authError.message.includes('already been registered') || authError.status === 422) {
-                    console.log('User already exists, trying to link to existing user...');
                     const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
                     const existingUser = listData.users.find(u => u.email === email);
 
@@ -98,9 +99,7 @@ export async function POST(request: Request) {
                             }, { status: 400 });
                         }
 
-                        console.log('User found but client row missing. Repairing...');
-                        // We do NOT send password reset here to avoid spamming if just repairing.
-                        // Or maybe we should? Let's assume the user just wants to fix the DB.
+                        // User exists in Auth but missing client row — repair mode
                     }
                 } else {
                     console.error('Error inviting user:', authError);
@@ -114,13 +113,18 @@ export async function POST(request: Request) {
             }
         }
 
-        // Create client record in database
+        // Create client record in database using Service Role (to bypass RLS)
+        const supabaseAdminForInsert = getSupabaseAdmin();
+        if (!supabaseAdminForInsert) {
+            return NextResponse.json({ success: false, error: 'Server not configured. Missing SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 });
+        }
+
         const insertData: Record<string, unknown> = { name, api_key };
         if (auth_user_id) {
             insertData.auth_user_id = auth_user_id;
         }
 
-        const { data, error } = await supabase
+        const { data, error } = await supabaseAdminForInsert
             .from('clients')
             .insert(insertData)
             .select()
@@ -163,7 +167,14 @@ export async function GET() {
     if (!auth.authenticated) return auth.response;
 
     try {
-        const { data, error } = await supabase
+        // Use Service Role client to bypass RLS (we already verified this is an Admin)
+        const supabaseAdmin = getSupabaseAdmin();
+
+        if (!supabaseAdmin) {
+            return NextResponse.json({ success: false, error: 'Server not configured. Missing SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 });
+        }
+
+        const { data, error } = await supabaseAdmin
             .from('clients')
             .select('id, name, created_at, auth_user_id') // api_key removed for security
             .order('created_at', { ascending: false });

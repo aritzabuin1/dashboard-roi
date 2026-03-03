@@ -1,78 +1,86 @@
 ---
-description: Audit a project for production readiness (secrets, logging, resilience, auth security)
+description: Comprehensive production readiness audit (security, resilience, performance, observability)
 ---
 
 # Production Audit Workflow
 
-Run this workflow before deploying ANY project to production.
+Run this workflow before deploying ANY project to production. This is a comprehensive checklist covering security, resilience, performance, and observability.
 
 ## Steps
 
-### 1. Scan for Hardcoded Secrets
-- Search all `.ts`, `.tsx`, `.py`, `.json`, `.env`, and `.md` files for patterns like:
+### 1. Hardcoded Secrets Scan (CRITICAL)
+- Search all `.ts`, `.tsx`, `.py`, `.js`, `.json`, `.env`, and `.md` files for:
   - `password = "`
   - `api_key = "`
   - `token = "`
   - `secret = "`
+  - `SUPABASE_SERVICE_ROLE_KEY = "`
   - Connection strings with credentials
-- If found: **STOP** and report immediately.
+  - Private keys (BEGIN PRIVATE KEY)
+- **Tooling**: Use `grep` or `rg` to find patterns.
+- **Action**: If found → STOP and report immediately.
 
-### 2. Verify .gitignore
-- Ensure `.env`, `local.settings.json`, `*.pem`, `*.key` are in `.gitignore`.
-- If missing: Add them and warn the user.
+### 2. Admin Authentication Audit (CRITICAL)
+- Check login logic in `src/app/api/admin/login/route.ts`:
+  - ❌ Base64 tokens or simple strings
+  - ❌ Plain text password matching (allow ONLY if intentional for specific use case, verify robust fallback)
+  - ✅ JWT tokens signed with `jose`
+  - ✅ Bcrypt/Argon2 hashing
+- Verify `requireAdmin()` middleware exists and is used on ALL admin routes.
+- Verify `JWT_SECRET` exists in `.env`.
 
-### 3. Check Logging Standards
-- Scan for `print()` or `console.log()` statements in production code.
-- Replace with proper logging (e.g., `logging.info()` in Python).
-- **CRITICAL**: Verify no PII (emails, phone numbers, user data) is logged directly.
-- Remove or redact any `console.log(email)`, `console.log(user)`, etc.
+### 3. API Key & Secrets Exposure (CRITICAL)
+- Verify `GET /api/clients` and `GET /api/users` do NOT return API keys, passwords, or hashes.
+- Check that error messages do NOT expose stack traces or env vars.
+- Verify Service Role keys are NEVER sent to the client.
 
-### 4. Verify Error Handling
-- Check that all external API calls have:
-  - `try/catch` or `try/except` blocks
-  - Timeout parameters
-  - Retry logic (preferably with `tenacity` or similar)
+### 4. Database Security (RLS) (CRITICAL)
+- **For Supabase**: Verify Row Level Security (RLS) is enabled on ALL tables.
+- Check policies:
+  - ❌ No `USING (true)` for `anon` role.
+  - ✅ Users only see their own data (`auth.uid() = user_id`).
+  - ✅ Service Role used ONLY for admin/webhook bypass.
 
-### 5. Health Endpoint
-- Verify a `/health` or `/api/health` endpoint exists for monitoring.
-- Should return status, timestamp, and environment.
+### 5. Rate Limiting (HIGH)
+- Identify critical endpoints (`/login`, `/register`, webhooks).
+- Verify distributed rate limiting is used (Upstash/Redis), NOT in-memory maps (which fail on serverless).
 
-### 6. Admin Authentication Audit (NEW)
-- **CRITICAL**: Check admin login/session mechanism:
-  - ❌ **BAD**: Base64-encoded tokens (e.g., `admin:${timestamp}`) - easily forgeable
-  - ❌ **BAD**: Plain text password comparison without hashing
-  - ✅ **GOOD**: JWT tokens signed with secret key (use `jose` library)
-  - ✅ **GOOD**: Bcrypt password hashing
-- Verify all admin-only endpoints require authentication
-- Check for `requireAdmin()` or similar middleware on sensitive routes
+### 6. Security Headers (HIGH)
+- Check `middleware.ts` or `next.config.js` for:
+  - `X-Frame-Options: DENY`
+  - `Content-Security-Policy`
+  - `Strict-Transport-Security`
+  - `X-Content-Type-Options: nosniff`
 
-### 7. API Key Exposure Check (NEW)
-- Verify API keys are NOT returned in public GET responses
-- API keys should only be revealed on-demand via protected endpoints
-- Check that reveal endpoints require admin authentication
+### 7. Dependency Vulnerabilities (HIGH)
+- Run `npm audit --production`.
+- Report any CRITICAL or HIGH vulnerabilities.
 
-### 8. Environment Variables Audit (NEW)
-- Verify all required env vars are documented in `.env.example`
-- Check that production requires:
-  - `JWT_SECRET` (for JWT token signing)
-  - `SUPABASE_SERVICE_ROLE_KEY` (for admin operations)
-  - Any other secrets needed for auth/security
+### 8. Environment Variables Audit (HIGH)
+- Verify `.env` is in `.gitignore`.
+- Verify `.env.example` exists and documents all required vars.
+- Check that production uses different secrets than dev.
 
-### 9. Endpoint Protection Matrix (NEW)
-Review and document which endpoints require authentication:
+### 9. Logging Standards (HIGH)
+- Scan for `console.log` in production code.
+- **CRITICAL**: Verify no PII (email, password, user data) is logged.
+- Ensure logging library (if used) handles levels (debug/info/error) correctly.
 
-| Endpoint | Auth Required? | Notes |
-|----------|---------------|-------|
-| `/api/admin/*` | ✅ Yes | All admin operations |
-| `/api/clients` POST | ✅ Yes | Creates resources |
-| `/api/clients` GET | ✅ Yes | Exposes client list |
-| `/api/automations` POST | ✅ Yes | Creates resources |
-| `/api/execution-webhook` | API Key | External integrations |
-| `/api/health` | ❌ No | Monitoring only |
+### 10. CORS Configuration (MEDIUM)
+- Verify `Access-Control-Allow-Origin` is NOT `*` in production (unless public API).
+- Whitelist specific domains for web apps.
 
-### 10. Generate Report
-- Create a markdown summary of findings in `.tmp/production_audit_report.md`
-- Include:
-  - Issues found (with severity: CRITICAL, HIGH, MEDIUM, LOW)
-  - Actions taken
-  - Remaining recommendations
+### 11. Webhook Verification (MEDIUM)
+- If receiving webhooks (Stripe, GitHub), verify HMAC signature validation is implemented.
+- Never trust the webhook body without signature check.
+
+### 12. Health & Observability (MEDIUM)
+- Verify `/api/health` endpoint exists.
+- Check if error tracking (Sentry) and analytics (Vercel) are set up.
+
+### 13. Generate Report
+- Create `.tmp/production_audit_report.md` with:
+  - Summary of findings (Critical/High/Medium/Low).
+  - List of passed checks.
+  - List of failed checks with file paths and recommended fixes.
+  - Final Go/No-Go recommendation.
