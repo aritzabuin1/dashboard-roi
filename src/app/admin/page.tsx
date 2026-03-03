@@ -11,6 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Skeleton } from "@/components/ui/skeleton"
 import { ArrowLeft, Plus, Copy, Check, LogOut } from "lucide-react"
 import Link from "next/link"
+import { SilenceAlertsBanner } from "@/components/admin/silence-alerts-banner"
+import { ReportSection } from "@/components/admin/report-section"
+import { InfoTooltip } from "@/components/ui/info-tooltip"
 
 interface Client {
     id: string
@@ -24,7 +27,16 @@ interface Automation {
     name: string
     manual_duration_minutes: number
     cost_per_hour: number
+    expected_frequency: string
+    silence_threshold_hours: number | null
     clients: { id: string; name: string }
+}
+
+const FREQUENCY_LABELS: Record<string, string> = {
+    daily: 'Diaria',
+    weekly: 'Semanal',
+    on_demand: 'Bajo demanda',
+    custom: 'Personalizada',
 }
 
 export default function AdminPage() {
@@ -32,7 +44,7 @@ export default function AdminPage() {
     const [clients, setClients] = useState<Client[]>([])
     const [automations, setAutomations] = useState<Automation[]>([])
     const [newClient, setNewClient] = useState({ name: '', email: '' })
-    const [newAutomation, setNewAutomation] = useState({ client_id: '', name: '', manual_duration_minutes: '', cost_per_hour: '' })
+    const [newAutomation, setNewAutomation] = useState({ client_id: '', name: '', manual_duration_minutes: '', cost_per_hour: '', expected_frequency: 'on_demand', silence_threshold_hours: '' })
     const [loading, setLoading] = useState(false)
     const [copiedKey, setCopiedKey] = useState<string | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
@@ -114,14 +126,19 @@ export default function AdminPage() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                ...newAutomation,
+                client_id: newAutomation.client_id,
+                name: newAutomation.name,
                 manual_duration_minutes: parseFloat(newAutomation.manual_duration_minutes) || 0,
-                cost_per_hour: parseFloat(newAutomation.cost_per_hour) || 0
+                cost_per_hour: parseFloat(newAutomation.cost_per_hour) || 0,
+                expected_frequency: newAutomation.expected_frequency,
+                ...(newAutomation.expected_frequency === 'custom' && newAutomation.silence_threshold_hours
+                    ? { silence_threshold_hours: parseInt(newAutomation.silence_threshold_hours) }
+                    : {})
             })
         })
         const data = await res.json()
         if (data.success) {
-            setNewAutomation({ client_id: '', name: '', manual_duration_minutes: '', cost_per_hour: '' })
+            setNewAutomation({ client_id: '', name: '', manual_duration_minutes: '', cost_per_hour: '', expected_frequency: 'on_demand', silence_threshold_hours: '' })
             fetchAutomations()
         } else {
             alert('Error: ' + data.error)
@@ -168,6 +185,9 @@ export default function AdminPage() {
                         <LogOut className="h-4 w-4 mr-2" /> Cerrar Sesión
                     </Button>
                 </div>
+
+                {/* Silence Alerts Banner */}
+                <SilenceAlertsBanner />
 
                 {/* Add Client Form */}
                 <Card>
@@ -302,7 +322,7 @@ export default function AdminPage() {
                         <CardTitle>Añadir Automatización</CardTitle>
                         <CardDescription>Configura el coste y tiempo de una nueva automatización</CardDescription>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
                         <form onSubmit={handleAddAutomation} className="grid grid-cols-1 md:grid-cols-5 gap-4">
                             <select
                                 className="border rounded-md p-2 bg-white dark:bg-slate-900"
@@ -337,6 +357,31 @@ export default function AdminPage() {
                                 <Plus className="h-4 w-4 mr-2" /> Añadir
                             </Button>
                         </form>
+                        <div className="flex items-center gap-4 pt-2 border-t">
+                            <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                                Frecuencia esperada
+                                <InfoTooltip text="Define cada cuánto se espera que se ejecute esta automatización. 'Bajo demanda' no genera alertas. Las demás opciones activan la detección de silencio." />
+                            </div>
+                            <select
+                                className="border rounded-md p-2 bg-white dark:bg-slate-900 text-sm"
+                                value={newAutomation.expected_frequency}
+                                onChange={(e) => setNewAutomation({ ...newAutomation, expected_frequency: e.target.value, silence_threshold_hours: '' })}
+                            >
+                                <option value="on_demand">Bajo demanda</option>
+                                <option value="daily">Diaria</option>
+                                <option value="weekly">Semanal</option>
+                                <option value="custom">Personalizada</option>
+                            </select>
+                            {newAutomation.expected_frequency === 'custom' && (
+                                <Input
+                                    type="number"
+                                    placeholder="Umbral (horas)"
+                                    value={newAutomation.silence_threshold_hours}
+                                    onChange={(e) => setNewAutomation({ ...newAutomation, silence_threshold_hours: e.target.value })}
+                                    className="w-40"
+                                />
+                            )}
+                        </div>
                     </CardContent>
                 </Card>
 
@@ -353,12 +398,13 @@ export default function AdminPage() {
                                     <TableHead>Nombre</TableHead>
                                     <TableHead>Tiempo Manual</TableHead>
                                     <TableHead>Coste/Hora</TableHead>
+                                    <TableHead>Frecuencia</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {automations.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                                        <TableCell colSpan={5} className="text-center text-muted-foreground">
                                             No hay automatizaciones configuradas.
                                         </TableCell>
                                     </TableRow>
@@ -371,6 +417,14 @@ export default function AdminPage() {
                                             <TableCell className="font-medium">{auto.name}</TableCell>
                                             <TableCell>{auto.manual_duration_minutes} min</TableCell>
                                             <TableCell>€{auto.cost_per_hour}/h</TableCell>
+                                            <TableCell>
+                                                <span className="text-sm text-muted-foreground">
+                                                    {FREQUENCY_LABELS[auto.expected_frequency] || auto.expected_frequency}
+                                                    {auto.expected_frequency === 'custom' && auto.silence_threshold_hours
+                                                        ? ` (${auto.silence_threshold_hours}h)`
+                                                        : ''}
+                                                </span>
+                                            </TableCell>
                                         </TableRow>
                                     ))
                                 )}
@@ -378,6 +432,9 @@ export default function AdminPage() {
                         </Table>
                     </CardContent>
                 </Card>
+
+                {/* ROI Reports */}
+                <ReportSection clients={clients} />
 
                 {/* Emergency Tools */}
                 <Card className="border-orange-200 dark:border-orange-900">

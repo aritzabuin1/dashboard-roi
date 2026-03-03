@@ -22,7 +22,7 @@ export async function POST(request: Request) {
 
     try {
         const body = await request.json();
-        const { client_id, name, manual_duration_minutes, cost_per_hour } = body;
+        const { client_id, name, manual_duration_minutes, cost_per_hour, expected_frequency, silence_threshold_hours } = body;
 
         if (!client_id || !name || manual_duration_minutes === undefined || cost_per_hour === undefined) {
             return NextResponse.json(
@@ -36,9 +36,15 @@ export async function POST(request: Request) {
             return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
         }
 
+        const insertData: Record<string, unknown> = { client_id, name, manual_duration_minutes, cost_per_hour };
+        if (expected_frequency) insertData.expected_frequency = expected_frequency;
+        if (silence_threshold_hours !== undefined && silence_threshold_hours !== null) {
+            insertData.silence_threshold_hours = silence_threshold_hours;
+        }
+
         const { data, error } = await supabaseAdmin
             .from('automation_metadata')
-            .insert({ client_id, name, manual_duration_minutes, cost_per_hour })
+            .insert(insertData)
             .select()
             .single();
 
@@ -75,10 +81,12 @@ export async function GET() {
         const { data, error } = await supabaseAdmin
             .from('automation_metadata')
             .select(`
-        id, 
-        name, 
-        manual_duration_minutes, 
-        cost_per_hour, 
+        id,
+        name,
+        manual_duration_minutes,
+        cost_per_hour,
+        expected_frequency,
+        silence_threshold_hours,
         created_at,
         clients (id, name)
       `)
