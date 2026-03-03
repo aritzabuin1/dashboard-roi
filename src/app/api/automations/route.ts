@@ -45,7 +45,7 @@ export async function POST(request: Request) {
         if (error) {
             console.error('Error creating automation:', error);
             return NextResponse.json(
-                { success: false, error: error.message },
+                { success: false, error: 'Error creando automatización.' },
                 { status: 500 }
             );
         }
@@ -85,7 +85,8 @@ export async function GET() {
             .order('created_at', { ascending: false });
 
         if (error) {
-            return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+            console.error('Error listing automations:', error);
+            return NextResponse.json({ success: false, error: 'Error cargando automatizaciones.' }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, automations: data });

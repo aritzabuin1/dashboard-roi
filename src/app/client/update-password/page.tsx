@@ -21,16 +21,21 @@ export default function UpdatePasswordPage() {
         setLoading(true)
         setMessage('')
 
-        const { error } = await supabase.auth.updateUser({ password })
+        try {
+            const { error } = await supabase.auth.updateUser({ password })
 
-        if (error) {
-            setMessage('Error: ' + error.message)
+            if (error) {
+                setMessage('Error: ' + error.message)
+            } else {
+                setMessage('Contraseña actualizada correctamente. Redirigiendo...')
+                setTimeout(() => {
+                    router.push('/')
+                }, 2000)
+            }
+        } catch (err) {
+            setMessage('Error de conexión. Inténtalo de nuevo.')
+        } finally {
             setLoading(false)
-        } else {
-            setMessage('✅ Contraseña actualizada correctamente. Redirigiendo...')
-            setTimeout(() => {
-                router.push('/')
-            }, 2000)
         }
     }
 

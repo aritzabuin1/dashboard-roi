@@ -49,8 +49,7 @@ export async function POST(request: Request) {
 
         if (error) {
             console.error('[generate-link] Supabase error:', error);
-            // Admin-only route — Supabase message is useful for troubleshooting
-            return NextResponse.json({ success: false, error: `Supabase: ${error.message}` }, { status: 400 });
+            return NextResponse.json({ success: false, error: 'Error generando enlace. Revisa los logs del servidor.' }, { status: 400 });
         }
 
         return NextResponse.json({

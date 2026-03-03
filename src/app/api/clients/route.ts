@@ -45,13 +45,14 @@ export async function POST(request: Request) {
 
         // If email is provided, create auth user and try to send invitation
         let emailWarning: string | null = null;
+        let createdNewAuthUser = false;
 
         if (email) {
             const supabaseAdmin = getSupabaseAdmin();
 
             if (!supabaseAdmin) {
                 return NextResponse.json(
-                    { success: false, error: 'Server not configured for invitations. Add SUPABASE_SERVICE_ROLE_KEY.' },
+                    { success: false, error: 'Configuración de servidor incompleta.' },
                     { status: 500 }
                 );
             }
@@ -93,6 +94,7 @@ export async function POST(request: Request) {
                 }
 
                 auth_user_id = newUser.user.id;
+                createdNewAuthUser = true;
             }
 
             // Try to send invitation email (non-blocking)
@@ -112,14 +114,14 @@ export async function POST(request: Request) {
                     emailWarning = `Cliente creado pero el email no se pudo enviar: ${inviteError.message}`;
                 }
             } else {
-                emailWarning = 'Cliente creado pero NEXT_PUBLIC_SITE_URL no está configurado. Configúralo para enviar invitaciones.';
+                emailWarning = 'Cliente creado pero NEXT_PUBLIC_SITE_URL no está configurado.';
             }
         }
 
         // Create client record in database using Service Role (to bypass RLS)
         const supabaseAdminForInsert = getSupabaseAdmin();
         if (!supabaseAdminForInsert) {
-            return NextResponse.json({ success: false, error: 'Server not configured. Missing SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
         }
 
         const insertData: Record<string, unknown> = { name, api_key };
@@ -134,17 +136,14 @@ export async function POST(request: Request) {
             .single();
 
         if (error) {
-            // Rollback: delete auth user ONLY if we just created it (not if it was existing)
-            // logic: if authData value existed, we created it. 
-            // Better: track user creation. But for now, safe approach:
-            // If we found 'existingUser', we MUST NOT delete it.
-            // Simplified: We only delete if we successfully invited (no authError).
-
-            // Actually, simply removing the deleteUser call is safer for now effectively preventing data loss.
-            // If insertion fails, we have an orphan user, which is better than deleting an existing user.
+            // Rollback: delete auth user only if we just created it
+            if (createdNewAuthUser && auth_user_id) {
+                await supabaseAdminForInsert.auth.admin.deleteUser(auth_user_id);
+                console.log('Rolled back orphaned auth user:', auth_user_id);
+            }
             console.error('Error creating client:', error);
             return NextResponse.json(
-                { success: false, error: 'Error creando perfil de cliente: ' + error.message },
+                { success: false, error: 'Error creando perfil de cliente.' },
                 { status: 500 }
             );
         }
@@ -175,7 +174,7 @@ export async function GET() {
         const supabaseAdmin = getSupabaseAdmin();
 
         if (!supabaseAdmin) {
-            return NextResponse.json({ success: false, error: 'Server not configured. Missing SUPABASE_SERVICE_ROLE_KEY.' }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
         }
 
         const { data, error } = await supabaseAdmin
@@ -184,7 +183,8 @@ export async function GET() {
             .order('created_at', { ascending: false });
 
         if (error) {
-            return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+            console.error('Error listing clients:', error);
+            return NextResponse.json({ success: false, error: 'Error cargando clientes.' }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, clients: data });

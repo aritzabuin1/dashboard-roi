@@ -85,39 +85,42 @@ export default function DashboardPage() {
   }, [selectedClient, timeRange, session])
 
   async function checkAuth() {
-    // Check Supabase Auth (client login)
-    const { data: { user } } = await supabase.auth.getUser()
+    try {
+      // Check Supabase Auth (client login)
+      const { data: { user } } = await supabase.auth.getUser()
 
-    if (user) {
-      // User is logged in via Supabase Auth - find their client
-      const { data: clientData } = await supabase
-        .from('clients')
-        .select('id, name')
-        .eq('auth_user_id', user.id)
-        .single()
+      if (user) {
+        // User is logged in via Supabase Auth - find their client
+        const { data: clientData } = await supabase
+          .from('clients')
+          .select('id, name')
+          .eq('auth_user_id', user.id)
+          .single()
 
-      if (clientData) {
-        setSession({
-          type: 'client',
-          clientId: clientData.id,
-          clientName: clientData.name,
-          email: user.email
-        })
-        setSelectedClient(clientData.id)
-        fetchClients() // Admin still needs client list
-        return
+        if (clientData) {
+          setSession({
+            type: 'client',
+            clientId: clientData.id,
+            clientName: clientData.name,
+            email: user.email
+          })
+          setSelectedClient(clientData.id)
+          return
+        }
       }
-    }
 
-    // Check admin cookie session
-    const adminRes = await fetch('/api/admin/check')
-    const adminData = await adminRes.json()
-
-    if (adminData.authenticated) {
-      setSession({ type: 'admin' })
-      fetchClients()
-      fetchMetrics()
-      return
+      // Check admin cookie session
+      const adminRes = await fetch('/api/admin/check')
+      if (adminRes.ok) {
+        const adminData = await adminRes.json()
+        if (adminData.authenticated) {
+          setSession({ type: 'admin' })
+          await fetchClients()
+          return
+        }
+      }
+    } catch (err) {
+      console.error('Auth check failed:', err)
     }
 
     // No session - show public view with login prompts
@@ -128,6 +131,7 @@ export default function DashboardPage() {
   async function fetchClients() {
     try {
       const res = await fetch('/api/clients')
+      if (!res.ok) return
       const json = await res.json()
       if (json.success) {
         setClients(json.clients || [])
@@ -146,6 +150,10 @@ export default function DashboardPage() {
 
       const url = `/api/metrics?range=${timeRange}${clientParam !== 'all' ? `&clientId=${clientParam}` : ''}`
       const res = await fetch(url)
+      if (!res.ok) {
+        setData(EMPTY_STATE)
+        return
+      }
       const json = await res.json()
       if (json.success && json.data) {
         setData(json.data)

@@ -4,6 +4,8 @@ import { createClient as createSSRClient } from '@/lib/supabase-server';
 import { createClient as createServiceClient, SupabaseClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/require-admin';
 
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Helper to get Service Role Client (for Admin)
 function getServiceRoleClient() {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
@@ -21,6 +23,11 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const clientIdParam = searchParams.get('clientId');
         const range = searchParams.get('range') || '7d';
+
+        // Validate clientId format if provided
+        if (clientIdParam && clientIdParam !== 'all' && !UUID_REGEX.test(clientIdParam)) {
+            return NextResponse.json({ success: false, error: 'Formato de clientId inválido.' }, { status: 400 });
+        }
 
         // 1. Determine Context (Admin vs Client)
         let supabase: SupabaseClient;
@@ -119,7 +126,7 @@ export async function GET(request: Request) {
 
         if (recentError) {
             console.error('Metrics Error (Recent):', recentError);
-            return NextResponse.json({ success: false, error: recentError.message }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Error cargando métricas.' }, { status: 500 });
         }
 
 
@@ -150,7 +157,7 @@ export async function GET(request: Request) {
 
         if (statsError) {
             console.error('Metrics Error (Stats):', statsError);
-            return NextResponse.json({ success: false, error: statsError.message }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Error cargando métricas.' }, { status: 500 });
         }
 
         // 4. Calculate Metrics
@@ -214,6 +221,6 @@ export async function GET(request: Request) {
 
     } catch (error: any) {
         console.error('Metrics Error:', error);
-        return NextResponse.json({ success: false, error: error.message || 'Internal Server Error' }, { status: 500 });
+        return NextResponse.json({ success: false, error: 'Error interno.' }, { status: 500 });
     }
 }

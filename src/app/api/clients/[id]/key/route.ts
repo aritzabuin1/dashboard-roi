@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 
 function getSupabaseAdmin() {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+        return null;
     }
     return createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,6 +39,9 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     try {
         const supabaseAdmin = getSupabaseAdmin();
+        if (!supabaseAdmin) {
+            return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
+        }
         const { data, error } = await supabaseAdmin
             .from('clients')
             .select('api_key')

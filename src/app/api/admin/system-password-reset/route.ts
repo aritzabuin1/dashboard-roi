@@ -49,7 +49,8 @@ export async function POST(request: Request) {
         );
 
         if (updateError) {
-            return NextResponse.json({ success: false, error: updateError.message }, { status: 400 });
+            console.error('[system-password-reset] Update error:', updateError);
+            return NextResponse.json({ success: false, error: 'Error actualizando contraseña.' }, { status: 400 });
         }
 
         return NextResponse.json({ success: true, message: 'Contraseña actualizada correctamente' });
