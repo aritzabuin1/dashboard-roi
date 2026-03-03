@@ -42,9 +42,10 @@ export async function POST(request: Request) {
 
         const api_key = generateApiKey();
         let auth_user_id: string | null = null;
-        let inviteLink: string | null = null;
 
-        // If email is provided, send invitation to client
+        // If email is provided, create auth user and try to send invitation
+        let emailWarning: string | null = null;
+
         if (email) {
             const supabaseAdmin = getSupabaseAdmin();
 
@@ -55,61 +56,63 @@ export async function POST(request: Request) {
                 );
             }
 
-            // Determine redirect URL
-            let redirectUrl = process.env.NEXT_PUBLIC_SITE_URL;
+            // Check if user already exists in Auth
+            const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+            const existingUser = listData.users.find(u => u.email === email);
 
+            if (existingUser) {
+                auth_user_id = existingUser.id;
+
+                // Check if client row already exists
+                const { data: existingClient } = await supabase
+                    .from('clients')
+                    .select('id')
+                    .eq('auth_user_id', auth_user_id)
+                    .single();
+
+                if (existingClient) {
+                    return NextResponse.json({
+                        success: false,
+                        error: 'Este usuario ya tiene un cliente asociado. No es necesario crearlo.'
+                    }, { status: 400 });
+                }
+            } else {
+                // Create user in Auth (without requiring email delivery)
+                const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                    email,
+                    user_metadata: { client_name: name },
+                    email_confirm: false
+                });
+
+                if (createError) {
+                    console.error('Error creating auth user:', createError);
+                    return NextResponse.json(
+                        { success: false, error: `Error creando usuario: ${createError.message}` },
+                        { status: 400 }
+                    );
+                }
+
+                auth_user_id = newUser.user.id;
+            }
+
+            // Try to send invitation email (non-blocking)
+            let redirectUrl = process.env.NEXT_PUBLIC_SITE_URL;
             if (!redirectUrl && process.env.VERCEL_URL) {
                 redirectUrl = `https://${process.env.VERCEL_URL}`;
             }
 
-            if (!redirectUrl) {
-                return NextResponse.json(
-                    { success: false, error: 'NEXT_PUBLIC_SITE_URL no está configurado. Añádelo en Vercel > Settings > Environment Variables.' },
-                    { status: 500 }
-                );
-            }
+            if (redirectUrl) {
+                const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+                    data: { client_name: name },
+                    redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
+                });
 
-            // Send magic link / invitation email
-            // Point to Auth Callback to exchange code and redirect to login
-            const { data: authData, error: authError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-                data: { client_name: name },
-                redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
-            });
-
-            if (authError) {
-                // Handle "User already registered" error gracefully
-                if (authError.message.includes('already been registered') || authError.status === 422) {
-                    const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
-                    const existingUser = listData.users.find(u => u.email === email);
-
-                    if (existingUser) {
-                        auth_user_id = existingUser.id;
-
-                        // CHECK IF CLIENT ROW ALREADY EXISTS
-                        const { data: existingClient } = await supabase
-                            .from('clients')
-                            .select('id')
-                            .eq('auth_user_id', auth_user_id)
-                            .single();
-
-                        if (existingClient) {
-                            return NextResponse.json({
-                                success: false,
-                                error: 'Este usuario ya tiene un cliente asociado. No es necesario crearlo.'
-                            }, { status: 400 });
-                        }
-
-                        // User exists in Auth but missing client row — repair mode
-                    }
-                } else {
-                    console.error('Error inviting user:', authError);
-                    return NextResponse.json(
-                        { success: false, error: `Error invitación: ${authError.message}` },
-                        { status: 400 }
-                    );
+                if (inviteError) {
+                    console.warn('Email invite failed (client still created):', inviteError.message);
+                    emailWarning = `Cliente creado pero el email no se pudo enviar: ${inviteError.message}`;
                 }
             } else {
-                auth_user_id = authData.user.id;
+                emailWarning = 'Cliente creado pero NEXT_PUBLIC_SITE_URL no está configurado. Configúralo para enviar invitaciones.';
             }
         }
 
@@ -149,7 +152,8 @@ export async function POST(request: Request) {
         return NextResponse.json({
             success: true,
             client: data,
-            message: 'Cliente creado/reparado correctamente.'
+            message: emailWarning || 'Cliente creado correctamente.',
+            emailSent: !emailWarning
         });
 
     } catch (error) {
