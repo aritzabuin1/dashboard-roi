@@ -53,7 +53,7 @@ export default function UpdatePasswordPage() {
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <div className="mx-auto mb-4">
-                        <Logo className="justify-center" iconSize={40} textSize="text-3xl" />
+                        <Logo className="justify-center" height={40} />
                     </div>
                     <CardTitle>Establecer Nueva Contraseña</CardTitle>
                     <CardDescription>Introduce tu nueva contraseña para acceder al dashboard</CardDescription>

@@ -184,7 +184,7 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
         <div className="text-center space-y-6">
-          <Logo className="justify-center" iconSize={48} textSize="text-4xl" />
+          <Logo className="justify-center" height={48} />
           <h1 className="text-2xl font-bold">Dashboard ROI</h1>
           <p className="text-slate-500">Accede para ver tus métricas de automatización</p>
           <div className="flex gap-4 justify-center">
@@ -210,7 +210,7 @@ export default function DashboardPage() {
       <header className="border-b bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800">
         <div className="container mx-auto py-4 px-4 flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <Logo iconSize={28} textSize="text-2xl" />
+            <Logo height={28} />
             {session.type === 'client' && (
               <Badge variant="secondary">{session.clientName}</Badge>
             )}
