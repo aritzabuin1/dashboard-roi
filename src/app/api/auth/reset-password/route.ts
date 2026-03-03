@@ -35,7 +35,11 @@ export async function POST(request: Request) {
             redirectUrl = `https://${process.env.VERCEL_URL}`;
         }
         if (!redirectUrl) {
-            redirectUrl = 'https://dashboard-roi-aritzmore1-gmailcoms-projects.vercel.app';
+            console.error('[reset-password] NEXT_PUBLIC_SITE_URL not configured');
+            return NextResponse.json(
+                { success: false, error: 'Configuración de servidor incompleta. Contacta al administrador.' },
+                { status: 500 }
+            );
         }
 
         const { error } = await supabaseAdmin.auth.resetPasswordForEmail(email, {

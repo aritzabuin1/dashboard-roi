@@ -7,7 +7,7 @@ import { requireAdmin } from '@/lib/require-admin';
 // Helper to get Service Role Client (for Admin)
 function getServiceRoleClient() {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+        return null;
     }
     return createServiceClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -28,10 +28,24 @@ export async function GET(request: Request) {
 
         if (adminAuth.authenticated) {
             // Case A: Admin. Use Service Role to see everything (or filtered by param).
-            supabase = getServiceRoleClient();
+            const serviceClient = getServiceRoleClient();
+            if (!serviceClient) {
+                return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
+            }
+            supabase = serviceClient;
         } else {
             // Case B: Client. Use SSR Client to respect RLS (only see own data).
-            supabase = await createSSRClient();
+            const ssrClient = await createSSRClient();
+            const { data: { user } } = await ssrClient.auth.getUser();
+
+            if (!user) {
+                return NextResponse.json(
+                    { success: false, error: 'No autenticado' },
+                    { status: 401 }
+                );
+            }
+
+            supabase = ssrClient;
         }
 
         // Calculate date range

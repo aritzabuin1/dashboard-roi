@@ -12,7 +12,7 @@ const RATE_LIMIT_CONFIG = {
 // Admin Client (Service Role) - REQUIRED for bypassing RLS during webhook ingestion
 function getSupabaseAdmin() {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+        return null;
     }
     return createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -79,6 +79,9 @@ export async function POST(request: Request) {
 
         // Initialize Admin Client
         const supabaseAdmin = getSupabaseAdmin();
+        if (!supabaseAdmin) {
+            return NextResponse.json({ success: false, error: 'Server configuration incomplete.' }, { status: 500 });
+        }
 
         // 2. Rate Limiting (by API key)
         const rateLimitResult = rateLimit(`webhook:${api_key}`, RATE_LIMIT_CONFIG);

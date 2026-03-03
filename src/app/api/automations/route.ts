@@ -6,7 +6,7 @@ import { requireAdmin } from '@/lib/require-admin';
 // Get Service Role client (bypasses RLS for admin operations)
 function getSupabaseAdmin() {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
-        throw new Error("Missing SUPABASE_SERVICE_ROLE_KEY");
+        return null;
     }
     return createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -32,6 +32,9 @@ export async function POST(request: Request) {
         }
 
         const supabaseAdmin = getSupabaseAdmin();
+        if (!supabaseAdmin) {
+            return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
+        }
 
         const { data, error } = await supabaseAdmin
             .from('automation_metadata')
@@ -65,6 +68,9 @@ export async function GET() {
 
     try {
         const supabaseAdmin = getSupabaseAdmin();
+        if (!supabaseAdmin) {
+            return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
+        }
 
         const { data, error } = await supabaseAdmin
             .from('automation_metadata')
