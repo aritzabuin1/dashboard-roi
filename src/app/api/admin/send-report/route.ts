@@ -35,7 +35,7 @@ export async function POST(request: Request) {
 
         if (!data.clientEmail) {
             return NextResponse.json(
-                { success: false, error: 'El cliente no tiene email configurado. Añádelo primero en Supabase.' },
+                { success: false, error: `El cliente "${data.clientName}" no tiene email. Ve a Supabase → Table Editor → clients → añade el email.` },
                 { status: 400 }
             );
         }
@@ -47,12 +47,18 @@ export async function POST(request: Request) {
 
         const resend = new Resend(process.env.RESEND_API_KEY);
 
-        const { error: sendError } = await resend.emails.send({
-            from: process.env.RESEND_FROM_EMAIL || 'AI-Mate <noreply@ai-mate.es>',
+        // Ensure "Name <email>" format for Resend
+        const fromEmail = process.env.RESEND_FROM_EMAIL || 'noreply@ai-mate.es';
+        const senderAddress = fromEmail.includes('<') ? fromEmail : `AI-Mate <${fromEmail}>`;
+
+        const { data: sendData, error: sendError } = await resend.emails.send({
+            from: senderAddress,
             to: data.clientEmail,
             subject: `Informe ROI — ${data.clientName} (${fromDate} - ${toDate})`,
             html,
         });
+
+        console.log('[send-report] Resend response:', { sendData, sendError });
 
         if (sendError) {
             console.error('[send-report] Resend error:', sendError);
