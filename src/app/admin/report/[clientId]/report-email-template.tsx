@@ -48,7 +48,7 @@ export function generateReportHtml(data: ReportData): string {
                     <!-- Header -->
                     <tr>
                         <td style="background-color: #0f172a; padding: 32px; border-radius: 12px 12px 0 0; text-align: center;">
-                            <div style="color: #f43f5e; font-size: 28px; font-weight: 700; letter-spacing: -0.5px;">AI mate</div>
+                            <img src="${process.env.NEXT_PUBLIC_SITE_URL || ''}/logo.jpg" alt="AI mate" width="160" height="25" style="display: block; margin: 0 auto 12px; border-radius: 4px;" />
                             <div style="color: #94a3b8; font-size: 14px; margin-top: 8px;">Informe de ROI</div>
                             <div style="color: #ffffff; font-size: 18px; font-weight: 600; margin-top: 12px;">${data.clientName}</div>
                             <div style="color: #94a3b8; font-size: 13px; margin-top: 4px;">${fromDate} &mdash; ${toDate}</div>
