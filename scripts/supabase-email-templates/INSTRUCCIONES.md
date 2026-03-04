@@ -1,13 +1,15 @@
 # Configurar plantillas de email en Supabase
 
+## IMPORTANTE — Cambio respecto a la versión anterior
+
+Las plantillas ahora usan `{{ .TokenHash }}` en vez de `{{ .ConfirmationURL }}`.
+Esto hace que el enlace vaya DIRECTAMENTE a nuestra app (sin pasar por el servidor de Supabase como intermediario), lo que soluciona el problema de que el usuario acababa en el login sin sesión.
+
 ## Pasos
 
 1. Ve a **Supabase Dashboard** → tu proyecto → **Authentication** → **Email Templates**
-2. Para cada plantilla, copia el **Subject** y el **Body** indicados abajo
-3. Pega el HTML del archivo correspondiente en el campo **Body** (reemplaza TODO el contenido)
-4. Guarda cada plantilla
-
----
+2. Para cada plantilla, cambia el **Subject** y reemplaza TODO el **Body** con el HTML del archivo correspondiente
+3. Guarda cada una
 
 ## 1. Invite (Invitación)
 
@@ -29,9 +31,10 @@
 - **Subject:** `Confirma tu cuenta en AI-Mate`
 - **Body:** Copia el contenido de `confirm-signup.html`
 
----
+## Verificación
 
-## Importante
-
-- La variable `{{ .ConfirmationURL }}` la rellena Supabase automáticamente. NO la cambies.
-- Después de guardar, prueba enviando una invitación a un email tuyo.
+Después de guardar las 4 plantillas:
+1. Desde el admin, invita a un cliente con tu email
+2. Revisa que el email llegue con el diseño correcto
+3. Haz clic en "Crear mi contraseña"
+4. Deberías llegar a la pantalla de establecer contraseña (NO al login)
