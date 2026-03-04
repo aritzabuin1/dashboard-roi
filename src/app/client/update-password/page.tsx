@@ -67,9 +67,11 @@ export default function UpdatePasswordPage() {
             if (error) {
                 setMessage('Error: ' + error.message)
             } else {
-                setMessage('Contraseña creada correctamente. Redirigiendo a tu dashboard...')
+                // Close session — force the user to log in with their new credentials
+                await supabase.auth.signOut()
+                setMessage('Contraseña creada correctamente. Redirigiendo al login...')
                 setTimeout(() => {
-                    router.push('/')
+                    router.push('/client/login?password_set=1')
                 }, 2000)
             }
         } catch {

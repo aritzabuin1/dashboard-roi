@@ -1,7 +1,7 @@
 "use client"
 
-import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@/lib/supabase-client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,13 +10,16 @@ import { Building2, ArrowLeft } from "lucide-react"
 import Link from "next/link"
 import { Logo } from "@/components/logo"
 
-export default function ClientLoginPage() {
+function LoginForm() {
     const [email, setEmail] = useState('')
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [loading, setLoading] = useState(false)
     const router = useRouter()
+    const searchParams = useSearchParams()
     const supabase = createClient()
+
+    const passwordJustSet = searchParams.get('password_set') === '1'
 
     useEffect(() => {
         // Clear admin session to avoid conflicts
@@ -57,6 +60,11 @@ export default function ClientLoginPage() {
                     <CardDescription>Introduce tus credenciales para ver tu dashboard</CardDescription>
                 </CardHeader>
                 <CardContent>
+                    {passwordJustSet && (
+                        <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm">
+                            Contraseña creada correctamente. Ahora inicia sesión con tus credenciales.
+                        </div>
+                    )}
                     <form onSubmit={handleSubmit} className="space-y-4">
                         <Input
                             type="email"
@@ -94,5 +102,17 @@ export default function ClientLoginPage() {
                 </CardContent>
             </Card>
         </div>
+    )
+}
+
+export default function ClientLoginPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4">
+                <p className="text-muted-foreground text-sm">Cargando...</p>
+            </div>
+        }>
+            <LoginForm />
+        </Suspense>
     )
 }
