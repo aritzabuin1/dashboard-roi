@@ -45,12 +45,23 @@ export function generateReportHtml(data: ReportData): string {
             <td align="center" style="padding: 32px 16px;">
                 <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width: 600px; width: 100%;">
 
-                    <!-- Header -->
+                    <!-- Accent bar -->
                     <tr>
-                        <td style="background-color: #0f172a; padding: 32px; border-radius: 12px 12px 0 0; text-align: center;">
-                            <img src="${process.env.NEXT_PUBLIC_SITE_URL || ''}/logo.jpg" alt="AI mate" width="160" height="25" style="display: block; margin: 0 auto 12px; border-radius: 4px;" />
-                            <div style="color: #94a3b8; font-size: 14px; margin-top: 8px;">Informe de ROI</div>
-                            <div style="color: #ffffff; font-size: 18px; font-weight: 600; margin-top: 12px;">${data.clientName}</div>
+                        <td style="background-color: #f43f5e; height: 4px; border-radius: 12px 12px 0 0; font-size: 0; line-height: 0;">&nbsp;</td>
+                    </tr>
+
+                    <!-- Header with logo -->
+                    <tr>
+                        <td style="background-color: #ffffff; padding: 28px 32px 20px; text-align: center;">
+                            <img src="${process.env.NEXT_PUBLIC_SITE_URL || ''}/logo.jpg" alt="AI mate" width="140" height="22" style="display: block; margin: 0 auto;" />
+                        </td>
+                    </tr>
+
+                    <!-- Report info -->
+                    <tr>
+                        <td style="background-color: #0f172a; padding: 24px 32px; text-align: center;">
+                            <div style="color: #94a3b8; font-size: 13px;">Informe de ROI</div>
+                            <div style="color: #ffffff; font-size: 18px; font-weight: 600; margin-top: 8px;">${data.clientName}</div>
                             <div style="color: #94a3b8; font-size: 13px; margin-top: 4px;">${fromDate} &mdash; ${toDate}</div>
                         </td>
                     </tr>
