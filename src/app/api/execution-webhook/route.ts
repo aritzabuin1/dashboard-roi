@@ -21,7 +21,7 @@ function getSupabaseAdmin() {
     );
 }
 
-// Helper to validate API Key
+// Helper to validate API Key — returns { client, debug } for diagnostics
 async function getClientByApiKey(supabaseAdmin: any, apiKey: string) {
     const { data, error } = await supabaseAdmin
         .from('clients')
@@ -30,18 +30,20 @@ async function getClientByApiKey(supabaseAdmin: any, apiKey: string) {
         .single();
 
     if (error || !data) {
-        // Debug: try to count all clients to see if DB is reachable
+        // Debug: check DB connectivity and existing keys
         const { data: allClients, error: countError } = await supabaseAdmin
             .from('clients')
             .select('id, api_key');
-        console.error(`[webhook] Key lookup failed. error=${JSON.stringify(error)}, dbReachable=${!countError}, clientCount=${allClients?.length ?? 0}`);
-        if (allClients?.length) {
-            const keys = allClients.map((c: any) => `${c.api_key?.substring(0, 6)}...(len=${c.api_key?.length})`);
-            console.error(`[webhook] Existing keys: ${JSON.stringify(keys)}, searched for: ${apiKey.substring(0, 6)}...(len=${apiKey.length})`);
-        }
-        return null;
+        const debug = {
+            lookupError: error?.message || null,
+            dbReachable: !countError,
+            clientCount: allClients?.length ?? 0,
+            existingKeyPrefixes: allClients?.map((c: any) => `${c.api_key?.substring(0, 8)}...(len=${c.api_key?.length})`) || [],
+            searchedKey: `${apiKey.substring(0, 8)}...(len=${apiKey.length})`
+        };
+        return { client: null, debug };
     }
-    return data;
+    return { client: data, debug: null };
 }
 
 // Helper to get or create Automation Metadata
@@ -115,14 +117,10 @@ export async function POST(request: Request) {
         }
 
         // 3. Auth
-        const client = await getClientByApiKey(supabaseAdmin, api_key);
+        const { client, debug } = await getClientByApiKey(supabaseAdmin, api_key);
         if (!client) {
-            const keyPreview = typeof api_key === 'string'
-                ? `${api_key.substring(0, 6)}...${api_key.substring(api_key.length - 4)} (len=${api_key.length})`
-                : `type=${typeof api_key}`;
-            console.error(`[webhook] Invalid API Key: ${keyPreview}`);
             return NextResponse.json(
-                { success: false, error: 'Invalid API Key' },
+                { success: false, error: 'Invalid API Key', debug },
                 { status: 401 }
             );
         }
