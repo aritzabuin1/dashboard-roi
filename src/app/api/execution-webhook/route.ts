@@ -29,7 +29,18 @@ async function getClientByApiKey(supabaseAdmin: any, apiKey: string) {
         .eq('api_key', apiKey)
         .single();
 
-    if (error || !data) return null;
+    if (error || !data) {
+        // Debug: try to count all clients to see if DB is reachable
+        const { data: allClients, error: countError } = await supabaseAdmin
+            .from('clients')
+            .select('id, api_key');
+        console.error(`[webhook] Key lookup failed. error=${JSON.stringify(error)}, dbReachable=${!countError}, clientCount=${allClients?.length ?? 0}`);
+        if (allClients?.length) {
+            const keys = allClients.map((c: any) => `${c.api_key?.substring(0, 6)}...(len=${c.api_key?.length})`);
+            console.error(`[webhook] Existing keys: ${JSON.stringify(keys)}, searched for: ${apiKey.substring(0, 6)}...(len=${apiKey.length})`);
+        }
+        return null;
+    }
     return data;
 }
 
@@ -67,7 +78,8 @@ async function getAutomationId(supabaseAdmin: any, clientId: string, automationN
 export async function POST(request: Request) {
     try {
         const body = await request.json();
-        const { api_key, automation_name, status, timestamp } = body;
+        const { api_key: raw_api_key, automation_name, status, timestamp } = body;
+        const api_key = typeof raw_api_key === 'string' ? raw_api_key.trim() : raw_api_key;
 
         // 1. Validation
         if (!api_key || !automation_name || !status) {
@@ -105,6 +117,10 @@ export async function POST(request: Request) {
         // 3. Auth
         const client = await getClientByApiKey(supabaseAdmin, api_key);
         if (!client) {
+            const keyPreview = typeof api_key === 'string'
+                ? `${api_key.substring(0, 6)}...${api_key.substring(api_key.length - 4)} (len=${api_key.length})`
+                : `type=${typeof api_key}`;
+            console.error(`[webhook] Invalid API Key: ${keyPreview}`);
             return NextResponse.json(
                 { success: false, error: 'Invalid API Key' },
                 { status: 401 }
