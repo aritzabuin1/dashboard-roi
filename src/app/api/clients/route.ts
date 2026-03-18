@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { randomBytes } from 'crypto';
 import { requireAdmin } from '@/lib/require-admin';
+import { sendInviteEmail } from '@/lib/invite-email';
 
 // Regular client for database operations
 import { supabase } from '@/lib/supabase';
@@ -115,24 +116,10 @@ export async function POST(request: Request) {
                 createdNewAuthUser = true;
             }
 
-            // Try to send invitation email (non-blocking)
-            let redirectUrl = process.env.NEXT_PUBLIC_SITE_URL;
-            if (!redirectUrl && process.env.VERCEL_URL) {
-                redirectUrl = `https://${process.env.VERCEL_URL}`;
-            }
-
-            if (redirectUrl) {
-                const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-                    data: { client_name: name },
-                    redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
-                });
-
-                if (inviteError) {
-                    console.warn('Email invite failed (client still created):', inviteError.message);
-                    emailWarning = `Cliente creado pero el email no se pudo enviar: ${inviteError.message}`;
-                }
-            } else {
-                emailWarning = 'Cliente creado pero NEXT_PUBLIC_SITE_URL no está configurado.';
+            // Send invitation email via Resend (non-blocking)
+            const emailResult = await sendInviteEmail(email, name);
+            if (!emailResult.success) {
+                emailWarning = `Cliente creado pero el email no se pudo enviar: ${emailResult.error}`;
             }
         }
 

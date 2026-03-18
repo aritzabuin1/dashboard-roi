@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { requireAdmin } from '@/lib/require-admin';
+import { sendInviteEmail } from '@/lib/invite-email';
 
 function getSupabaseAdmin() {
     if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
@@ -150,32 +151,15 @@ export async function POST(request: Request) {
             );
         }
 
-        // Send invitation email
-        let redirectUrl = process.env.NEXT_PUBLIC_SITE_URL;
-        if (!redirectUrl && process.env.VERCEL_URL) {
-            redirectUrl = `https://${process.env.VERCEL_URL}`;
-        }
-
-        let emailSent = false;
-        if (redirectUrl) {
-            const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
-                data: { client_name: client.name },
-                redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
-            });
-
-            if (inviteError) {
-                console.warn('[client-users] Email invite failed:', inviteError.message);
-            } else {
-                emailSent = true;
-            }
-        }
+        // Send invitation email via Resend
+        const emailResult = await sendInviteEmail(email, client.name);
 
         return NextResponse.json({
             success: true,
-            message: emailSent
+            message: emailResult.success
                 ? `Invitación enviada a ${email}.`
-                : `Usuario añadido pero el email no se pudo enviar. Usa las herramientas de emergencia.`,
-            emailSent
+                : `Usuario añadido pero el email no se pudo enviar: ${emailResult.error}`,
+            emailSent: emailResult.success
         });
 
     } catch (error) {
