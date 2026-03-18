@@ -91,6 +91,7 @@ export default function DashboardPage() {
 
       if (user) {
         // User is logged in via Supabase Auth - find their client
+        // Check primary auth_user_id on clients table
         const { data: clientData } = await supabase
           .from('clients')
           .select('id, name')
@@ -105,6 +106,26 @@ export default function DashboardPage() {
             email: user.email
           })
           setSelectedClient(clientData.id)
+          return
+        }
+
+        // Check client_users table (multi-user access)
+        const { data: cuData } = await supabase
+          .from('client_users')
+          .select('client_id, clients(id, name)')
+          .eq('auth_user_id', user.id)
+          .limit(1)
+          .single()
+
+        if (cuData?.clients) {
+          const client = cuData.clients as unknown as { id: string; name: string }
+          setSession({
+            type: 'client',
+            clientId: client.id,
+            clientName: client.name,
+            email: user.email
+          })
+          setSelectedClient(client.id)
           return
         }
       }
