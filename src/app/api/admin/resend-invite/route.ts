@@ -17,11 +17,11 @@ export async function POST(request: Request) {
     if (!auth.authenticated) return auth.response;
 
     try {
-        const { clientId } = await request.json();
+        const { clientId, email } = await request.json();
 
-        if (!clientId) {
+        if (!clientId || !email) {
             return NextResponse.json(
-                { success: false, error: 'clientId es obligatorio.' },
+                { success: false, error: 'clientId y email son obligatorios.' },
                 { status: 400 }
             );
         }
@@ -48,26 +48,72 @@ export async function POST(request: Request) {
             );
         }
 
-        if (!client.auth_user_id) {
+        if (client.auth_user_id) {
             return NextResponse.json(
-                { success: false, error: 'Este cliente no tiene usuario de acceso. Fue creado sin email.' },
+                { success: false, error: 'Este cliente ya tiene acceso al dashboard.' },
                 { status: 400 }
             );
         }
 
-        // Get the auth user to find their email
-        const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.getUserById(client.auth_user_id);
+        // Check if email is already used by another auth user linked to a client
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const existingUser = listData.users.find(u => u.email === email);
+        let auth_user_id: string;
 
-        if (authError || !authUser?.user?.email) {
+        if (existingUser) {
+            // Check if this auth user is already linked to another client
+            const { data: existingClient } = await supabaseAdmin
+                .from('clients')
+                .select('id')
+                .eq('auth_user_id', existingUser.id)
+                .maybeSingle();
+
+            if (existingClient) {
+                return NextResponse.json(
+                    { success: false, error: 'Este email ya está asociado a otro cliente.' },
+                    { status: 400 }
+                );
+            }
+
+            auth_user_id = existingUser.id;
+        } else {
+            // Create auth user
+            const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                email,
+                user_metadata: { client_name: client.name },
+                email_confirm: false
+            });
+
+            if (createError) {
+                console.error('[send-invite] Error creating auth user:', createError);
+                return NextResponse.json(
+                    { success: false, error: `Error creando usuario: ${createError.message}` },
+                    { status: 400 }
+                );
+            }
+
+            auth_user_id = newUser.user.id;
+        }
+
+        // Link auth user to client
+        const { error: updateError } = await supabaseAdmin
+            .from('clients')
+            .update({ auth_user_id })
+            .eq('id', clientId);
+
+        if (updateError) {
+            console.error('[send-invite] Error linking auth user:', updateError);
+            // Rollback: delete auth user if we just created it
+            if (!existingUser) {
+                await supabaseAdmin.auth.admin.deleteUser(auth_user_id);
+            }
             return NextResponse.json(
-                { success: false, error: 'No se pudo obtener el email del usuario.' },
+                { success: false, error: 'Error vinculando usuario al cliente.' },
                 { status: 500 }
             );
         }
 
-        const email = authUser.user.email;
-
-        // Build redirect URL
+        // Send invitation email
         let redirectUrl = process.env.NEXT_PUBLIC_SITE_URL;
         if (!redirectUrl && process.env.VERCEL_URL) {
             redirectUrl = `https://${process.env.VERCEL_URL}`;
@@ -80,27 +126,28 @@ export async function POST(request: Request) {
             );
         }
 
-        // Resend the invitation
         const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
             data: { client_name: client.name },
             redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
         });
 
         if (inviteError) {
-            console.error('[resend-invite] Error:', inviteError.message);
-            return NextResponse.json(
-                { success: false, error: `Error enviando invitación: ${inviteError.message}` },
-                { status: 500 }
-            );
+            console.error('[send-invite] Email error:', inviteError.message);
+            return NextResponse.json({
+                success: true,
+                message: `Usuario vinculado pero el email no se pudo enviar: ${inviteError.message}. Usa las herramientas de emergencia para generar un link manual.`,
+                emailSent: false
+            });
         }
 
         return NextResponse.json({
             success: true,
-            message: `Invitación reenviada a ${email}.`
+            message: `Invitación enviada a ${email}.`,
+            emailSent: true
         });
 
     } catch (error) {
-        console.error('[resend-invite] Unexpected error:', error);
+        console.error('[send-invite] Unexpected error:', error);
         return NextResponse.json(
             { success: false, error: 'Error interno del servidor.' },
             { status: 500 }

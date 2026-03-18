@@ -147,24 +147,28 @@ export default function AdminPage() {
         setLoading(false)
     }
 
-    async function handleResendInvite(clientId: string) {
+    async function handleSendInvite(clientId: string) {
+        const email = prompt('Introduce el email del cliente para enviarle la invitación:')
+        if (!email) return
+
         setResendingInvite(clientId)
         setSuccessMessage(null)
         try {
             const res = await fetch('/api/admin/resend-invite', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ clientId })
+                body: JSON.stringify({ clientId, email })
             })
             const data = await res.json()
             if (data.success) {
                 setSuccessMessage(data.message)
                 setTimeout(() => setSuccessMessage(null), 8000)
+                fetchClients()
             } else {
                 alert('Error: ' + data.error)
             }
         } catch {
-            alert('Error de conexión al reenviar invitación')
+            alert('Error de conexión al enviar invitación')
         }
         setResendingInvite(null)
     }
@@ -338,19 +342,19 @@ export default function AdminPage() {
                                             </TableCell>
                                             <TableCell>{new Date(client.created_at).toLocaleDateString()}</TableCell>
                                             <TableCell>
-                                                {client.auth_user_id && (
+                                                {!client.auth_user_id && (
                                                     <Button
                                                         variant="outline"
                                                         size="sm"
                                                         disabled={resendingInvite === client.id}
-                                                        onClick={() => handleResendInvite(client.id)}
+                                                        onClick={() => handleSendInvite(client.id)}
                                                     >
                                                         {resendingInvite === client.id ? (
                                                             <Loader2 className="h-4 w-4 mr-1 animate-spin" />
                                                         ) : (
                                                             <Mail className="h-4 w-4 mr-1" />
                                                         )}
-                                                        Reenviar invitación
+                                                        Enviar invitación
                                                     </Button>
                                                 )}
                                             </TableCell>
