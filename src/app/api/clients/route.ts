@@ -153,6 +153,22 @@ export async function POST(request: Request) {
             );
         }
 
+        // Also add to client_users for complete tracking
+        if (email && auth_user_id && data) {
+            const { error: cuError } = await supabaseAdminForInsert
+                .from('client_users')
+                .insert({
+                    client_id: data.id,
+                    auth_user_id,
+                    email,
+                    role: 'admin'
+                });
+
+            if (cuError) {
+                console.warn('client_users insert failed (non-blocking):', cuError.message);
+            }
+        }
+
         return NextResponse.json({
             success: true,
             client: data,

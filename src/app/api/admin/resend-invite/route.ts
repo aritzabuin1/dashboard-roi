@@ -113,6 +113,20 @@ export async function POST(request: Request) {
             );
         }
 
+        // Also add to client_users for complete tracking
+        const { error: cuError } = await supabaseAdmin
+            .from('client_users')
+            .upsert({
+                client_id: clientId,
+                auth_user_id,
+                email,
+                role: 'admin'
+            }, { onConflict: 'client_id,email' });
+
+        if (cuError) {
+            console.warn('[send-invite] client_users insert failed (non-blocking):', cuError.message);
+        }
+
         // Send invitation email
         let redirectUrl = process.env.NEXT_PUBLIC_SITE_URL;
         if (!redirectUrl && process.env.VERCEL_URL) {
