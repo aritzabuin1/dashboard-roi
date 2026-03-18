@@ -9,11 +9,20 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ArrowLeft, Plus, Copy, Check, LogOut, Mail, Loader2 } from "lucide-react"
+import { ArrowLeft, Plus, Copy, Check, LogOut, Mail, Loader2, ChevronDown, ChevronUp, UserPlus, RefreshCw, Users } from "lucide-react"
 import Link from "next/link"
 import { SilenceAlertsBanner } from "@/components/admin/silence-alerts-banner"
 import { ReportSection } from "@/components/admin/report-section"
 import { InfoTooltip } from "@/components/ui/info-tooltip"
+
+interface ClientUser {
+    id: string
+    email: string
+    role: string
+    invited_at: string
+    accepted_at: string | null
+    auth_user_id: string | null
+}
 
 interface Client {
     id: string
@@ -48,6 +57,15 @@ export default function AdminPage() {
     const [loading, setLoading] = useState(false)
     const [copiedKey, setCopiedKey] = useState<string | null>(null)
     const [successMessage, setSuccessMessage] = useState<string | null>(null)
+
+    // Client users state
+    const [expandedClient, setExpandedClient] = useState<string | null>(null)
+    const [clientUsers, setClientUsers] = useState<Record<string, ClientUser[]>>({})
+    const [loadingUsers, setLoadingUsers] = useState<string | null>(null)
+    const [inviteEmail, setInviteEmail] = useState('')
+    const [inviteRole, setInviteRole] = useState('')
+    const [invitingUser, setInvitingUser] = useState(false)
+    const [resendingUser, setResendingUser] = useState<string | null>(null)
 
     // Tools state
     const [toolEmail, setToolEmail] = useState('')
@@ -173,6 +191,83 @@ export default function AdminPage() {
         setResendingInvite(null)
     }
 
+    async function fetchClientUsers(clientId: string) {
+        setLoadingUsers(clientId)
+        try {
+            const res = await fetch(`/api/admin/client-users?clientId=${clientId}`)
+            const data = await res.json()
+            if (data.success) {
+                setClientUsers(prev => ({ ...prev, [clientId]: data.users || [] }))
+            }
+        } catch {
+            console.error('Error fetching client users')
+        }
+        setLoadingUsers(null)
+    }
+
+    function toggleExpandClient(clientId: string) {
+        if (expandedClient === clientId) {
+            setExpandedClient(null)
+        } else {
+            setExpandedClient(clientId)
+            if (!clientUsers[clientId]) {
+                fetchClientUsers(clientId)
+            }
+        }
+        setInviteEmail('')
+        setInviteRole('')
+    }
+
+    async function handleInviteUser(clientId: string) {
+        if (!inviteEmail.trim()) return
+        setInvitingUser(true)
+        setSuccessMessage(null)
+        try {
+            const res = await fetch('/api/admin/client-users', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId, email: inviteEmail.trim(), role: inviteRole.trim() || 'viewer' })
+            })
+            const data = await res.json()
+            if (data.success) {
+                setSuccessMessage(data.message)
+                setTimeout(() => setSuccessMessage(null), 8000)
+                setInviteEmail('')
+                setInviteRole('')
+                fetchClientUsers(clientId)
+                fetchClients()
+            } else {
+                alert('Error: ' + data.error)
+            }
+        } catch {
+            alert('Error de conexión al enviar invitación')
+        }
+        setInvitingUser(false)
+    }
+
+    async function handleResendUserInvite(clientUserId: string, clientId: string) {
+        setResendingUser(clientUserId)
+        setSuccessMessage(null)
+        try {
+            const res = await fetch('/api/admin/client-users/resend', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientUserId })
+            })
+            const data = await res.json()
+            if (data.success) {
+                setSuccessMessage(data.message)
+                setTimeout(() => setSuccessMessage(null), 8000)
+                fetchClientUsers(clientId)
+            } else {
+                alert('Error: ' + data.error)
+            }
+        } catch {
+            alert('Error de conexión')
+        }
+        setResendingUser(null)
+    }
+
     function copyToClipboard(text: string) {
         navigator.clipboard.writeText(text)
         setCopiedKey(text)
@@ -266,7 +361,7 @@ export default function AdminPage() {
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Nombre</TableHead>
-                                    <TableHead>Acceso Dashboard</TableHead>
+                                    <TableHead>Usuarios</TableHead>
                                     <TableHead>API Key</TableHead>
                                     <TableHead>Creado</TableHead>
                                     <TableHead>Acciones</TableHead>
@@ -281,12 +376,19 @@ export default function AdminPage() {
                                     </TableRow>
                                 ) : (
                                     clients.map((client) => (
-                                        <TableRow key={client.id}>
-                                            <TableCell className="font-medium">{client.name}</TableCell>
+                                        <>
+                                        <TableRow key={client.id} className="cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-900" onClick={() => toggleExpandClient(client.id)}>
+                                            <TableCell className="font-medium">
+                                                <div className="flex items-center gap-2">
+                                                    {expandedClient === client.id ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+                                                    {client.name}
+                                                </div>
+                                            </TableCell>
                                             <TableCell>
                                                 {client.auth_user_id ? (
                                                     <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">
-                                                        ✓ Con acceso
+                                                        <Users className="h-3 w-3 mr-1" />
+                                                        Con acceso
                                                     </Badge>
                                                 ) : (
                                                     <Badge variant="outline" className="text-slate-500">
@@ -294,7 +396,7 @@ export default function AdminPage() {
                                                     </Badge>
                                                 )}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell onClick={(e) => e.stopPropagation()}>
                                                 <div className="flex items-center gap-2">
                                                     {revealedKeys[client.id] ? (
                                                         <>
@@ -330,35 +432,149 @@ export default function AdminPage() {
                                                                     } else {
                                                                         alert('Error: ' + data.error);
                                                                     }
-                                                                } catch (err) {
+                                                                } catch {
                                                                     alert('Error fetching API key');
                                                                 }
                                                             }}
                                                         >
-                                                            🔑 Revelar Key
+                                                            Revelar Key
                                                         </Button>
                                                     )}
                                                 </div>
                                             </TableCell>
                                             <TableCell>{new Date(client.created_at).toLocaleDateString()}</TableCell>
-                                            <TableCell>
-                                                {!client.auth_user_id && (
-                                                    <Button
-                                                        variant="outline"
-                                                        size="sm"
-                                                        disabled={resendingInvite === client.id}
-                                                        onClick={() => handleSendInvite(client.id)}
-                                                    >
-                                                        {resendingInvite === client.id ? (
-                                                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-                                                        ) : (
-                                                            <Mail className="h-4 w-4 mr-1" />
-                                                        )}
-                                                        Enviar invitación
-                                                    </Button>
-                                                )}
+                                            <TableCell onClick={(e) => e.stopPropagation()}>
+                                                <Button
+                                                    variant="outline"
+                                                    size="sm"
+                                                    onClick={() => toggleExpandClient(client.id)}
+                                                >
+                                                    <UserPlus className="h-4 w-4 mr-1" />
+                                                    Gestionar usuarios
+                                                </Button>
                                             </TableCell>
                                         </TableRow>
+
+                                        {/* Expanded: User management */}
+                                        {expandedClient === client.id && (
+                                            <TableRow key={`${client.id}-users`}>
+                                                <TableCell colSpan={5} className="bg-slate-50/50 dark:bg-slate-900/50 p-0">
+                                                    <div className="p-4 space-y-4">
+                                                        <h4 className="text-sm font-semibold flex items-center gap-2">
+                                                            <Users className="h-4 w-4" />
+                                                            Usuarios con acceso a {client.name}
+                                                        </h4>
+
+                                                        {/* Loading */}
+                                                        {loadingUsers === client.id && (
+                                                            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                                <Loader2 className="h-4 w-4 animate-spin" /> Cargando usuarios...
+                                                            </div>
+                                                        )}
+
+                                                        {/* Users list */}
+                                                        {clientUsers[client.id] && clientUsers[client.id].length > 0 && (
+                                                            <div className="rounded-md border">
+                                                                <Table>
+                                                                    <TableHeader>
+                                                                        <TableRow>
+                                                                            <TableHead className="text-xs">Email</TableHead>
+                                                                            <TableHead className="text-xs">Rol</TableHead>
+                                                                            <TableHead className="text-xs">Estado</TableHead>
+                                                                            <TableHead className="text-xs">Invitado</TableHead>
+                                                                            <TableHead className="text-xs"></TableHead>
+                                                                        </TableRow>
+                                                                    </TableHeader>
+                                                                    <TableBody>
+                                                                        {clientUsers[client.id].map((user) => (
+                                                                            <TableRow key={user.id}>
+                                                                                <TableCell className="text-sm">{user.email}</TableCell>
+                                                                                <TableCell>
+                                                                                    <Badge variant="outline" className="text-xs">
+                                                                                        {user.role || 'viewer'}
+                                                                                    </Badge>
+                                                                                </TableCell>
+                                                                                <TableCell>
+                                                                                    {user.accepted_at ? (
+                                                                                        <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 text-xs">
+                                                                                            Activo
+                                                                                        </Badge>
+                                                                                    ) : (
+                                                                                        <Badge variant="outline" className="text-amber-600 dark:text-amber-400 text-xs">
+                                                                                            Pendiente
+                                                                                        </Badge>
+                                                                                    )}
+                                                                                </TableCell>
+                                                                                <TableCell className="text-xs text-muted-foreground">
+                                                                                    {new Date(user.invited_at).toLocaleDateString()}
+                                                                                </TableCell>
+                                                                                <TableCell>
+                                                                                    <Button
+                                                                                        variant="ghost"
+                                                                                        size="sm"
+                                                                                        disabled={resendingUser === user.id}
+                                                                                        onClick={() => handleResendUserInvite(user.id, client.id)}
+                                                                                        title={user.accepted_at ? 'Enviar email de recuperación' : 'Reenviar invitación'}
+                                                                                    >
+                                                                                        {resendingUser === user.id ? (
+                                                                                            <Loader2 className="h-3 w-3 animate-spin" />
+                                                                                        ) : (
+                                                                                            <RefreshCw className="h-3 w-3" />
+                                                                                        )}
+                                                                                        <span className="ml-1 text-xs">
+                                                                                            {user.accepted_at ? 'Reenviar acceso' : 'Reenviar invitación'}
+                                                                                        </span>
+                                                                                    </Button>
+                                                                                </TableCell>
+                                                                            </TableRow>
+                                                                        ))}
+                                                                    </TableBody>
+                                                                </Table>
+                                                            </div>
+                                                        )}
+
+                                                        {/* No users message */}
+                                                        {clientUsers[client.id] && clientUsers[client.id].length === 0 && loadingUsers !== client.id && (
+                                                            <p className="text-sm text-muted-foreground">
+                                                                No hay usuarios invitados. Añade uno abajo.
+                                                            </p>
+                                                        )}
+
+                                                        {/* Invite new user form */}
+                                                        <div className="flex items-center gap-2 pt-2 border-t">
+                                                            <Input
+                                                                type="email"
+                                                                placeholder="Email del nuevo usuario"
+                                                                value={inviteEmail}
+                                                                onChange={(e) => setInviteEmail(e.target.value)}
+                                                                className="max-w-xs"
+                                                                onKeyDown={(e) => e.key === 'Enter' && handleInviteUser(client.id)}
+                                                            />
+                                                            <Input
+                                                                placeholder="Rol (ej: CEO, CTO...)"
+                                                                value={inviteRole}
+                                                                onChange={(e) => setInviteRole(e.target.value)}
+                                                                className="max-w-[160px]"
+                                                                onKeyDown={(e) => e.key === 'Enter' && handleInviteUser(client.id)}
+                                                            />
+                                                            <Button
+                                                                size="sm"
+                                                                disabled={invitingUser || !inviteEmail.trim()}
+                                                                onClick={() => handleInviteUser(client.id)}
+                                                            >
+                                                                {invitingUser ? (
+                                                                    <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                                ) : (
+                                                                    <Mail className="h-4 w-4 mr-1" />
+                                                                )}
+                                                                Enviar invitación
+                                                            </Button>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        )}
+                                        </>
                                     ))
                                 )}
                             </TableBody>

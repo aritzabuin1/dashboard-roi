@@ -39,26 +39,53 @@ CREATE TABLE public.executions (
 CREATE INDEX idx_executions_automation_id ON public.executions(automation_id);
 CREATE INDEX idx_executions_timestamp ON public.executions(execution_timestamp);
 
+-- Multi-user access per client
+CREATE TABLE public.client_users (
+  id uuid DEFAULT uuid_generate_v4() PRIMARY KEY,
+  client_id uuid REFERENCES public.clients(id) ON DELETE CASCADE NOT NULL,
+  auth_user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE,
+  email text NOT NULL,
+  role text DEFAULT 'viewer',
+  invited_at timestamptz DEFAULT now(),
+  accepted_at timestamptz,
+  UNIQUE(client_id, email)
+);
+
+CREATE INDEX idx_client_users_client_id ON public.client_users(client_id);
+CREATE INDEX idx_client_users_auth_user_id ON public.client_users(auth_user_id);
+
 -- 3. Row Level Security
 ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.automation_metadata ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.executions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.client_users ENABLE ROW LEVEL SECURITY;
 
--- clients: users only see their own profile
+-- client_users: users see own memberships
+CREATE POLICY "Users see own memberships"
+ON public.client_users FOR SELECT
+TO authenticated
+USING (auth_user_id = auth.uid());
+
+-- clients: users see profile if primary auth_user OR in client_users
 CREATE POLICY "Users see own client profile"
 ON public.clients FOR SELECT
 TO authenticated
-USING (auth.uid() = auth_user_id);
+USING (
+  auth.uid() = auth_user_id
+  OR id IN (SELECT client_id FROM public.client_users WHERE auth_user_id = auth.uid())
+);
 
--- automation_metadata: users see automations linked to their client
+-- automation_metadata: users see automations linked via clients or client_users
 CREATE POLICY "Users see own automations"
 ON public.automation_metadata FOR SELECT
 TO authenticated
 USING (client_id IN (
     SELECT id FROM public.clients WHERE auth_user_id = auth.uid()
+    UNION
+    SELECT client_id FROM public.client_users WHERE auth_user_id = auth.uid()
 ));
 
--- executions: users see executions from their automations
+-- executions: users see executions from accessible automations
 CREATE POLICY "Users see own executions"
 ON public.executions FOR SELECT
 TO authenticated
@@ -66,5 +93,7 @@ USING (automation_id IN (
     SELECT id FROM public.automation_metadata
     WHERE client_id IN (
         SELECT id FROM public.clients WHERE auth_user_id = auth.uid()
+        UNION
+        SELECT client_id FROM public.client_users WHERE auth_user_id = auth.uid()
     )
 ));
