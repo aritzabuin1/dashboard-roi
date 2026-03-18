@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ArrowLeft, Plus, Copy, Check, LogOut } from "lucide-react"
+import { ArrowLeft, Plus, Copy, Check, LogOut, Mail, Loader2 } from "lucide-react"
 import Link from "next/link"
 import { SilenceAlertsBanner } from "@/components/admin/silence-alerts-banner"
 import { ReportSection } from "@/components/admin/report-section"
@@ -53,6 +53,7 @@ export default function AdminPage() {
     const [toolEmail, setToolEmail] = useState('')
     const [generatedLink, setGeneratedLink] = useState<string | null>(null)
     const [revealedKeys, setRevealedKeys] = useState<Record<string, string>>({})
+    const [resendingInvite, setResendingInvite] = useState<string | null>(null)
 
     const router = useRouter()
 
@@ -146,6 +147,28 @@ export default function AdminPage() {
         setLoading(false)
     }
 
+    async function handleResendInvite(clientId: string) {
+        setResendingInvite(clientId)
+        setSuccessMessage(null)
+        try {
+            const res = await fetch('/api/admin/resend-invite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ clientId })
+            })
+            const data = await res.json()
+            if (data.success) {
+                setSuccessMessage(data.message)
+                setTimeout(() => setSuccessMessage(null), 8000)
+            } else {
+                alert('Error: ' + data.error)
+            }
+        } catch {
+            alert('Error de conexión al reenviar invitación')
+        }
+        setResendingInvite(null)
+    }
+
     function copyToClipboard(text: string) {
         navigator.clipboard.writeText(text)
         setCopiedKey(text)
@@ -229,7 +252,12 @@ export default function AdminPage() {
                     <CardHeader>
                         <CardTitle>Clientes</CardTitle>
                     </CardHeader>
-                    <CardContent>
+                    <CardContent className="space-y-4">
+                        {successMessage && (
+                            <div className="p-3 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 rounded-lg text-sm">
+                                {successMessage}
+                            </div>
+                        )}
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -237,12 +265,13 @@ export default function AdminPage() {
                                     <TableHead>Acceso Dashboard</TableHead>
                                     <TableHead>API Key</TableHead>
                                     <TableHead>Creado</TableHead>
+                                    <TableHead>Acciones</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
                                 {clients.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                                        <TableCell colSpan={5} className="text-center text-muted-foreground">
                                             No hay clientes. Añade uno arriba.
                                         </TableCell>
                                     </TableRow>
@@ -308,6 +337,23 @@ export default function AdminPage() {
                                                 </div>
                                             </TableCell>
                                             <TableCell>{new Date(client.created_at).toLocaleDateString()}</TableCell>
+                                            <TableCell>
+                                                {client.auth_user_id && (
+                                                    <Button
+                                                        variant="outline"
+                                                        size="sm"
+                                                        disabled={resendingInvite === client.id}
+                                                        onClick={() => handleResendInvite(client.id)}
+                                                    >
+                                                        {resendingInvite === client.id ? (
+                                                            <Loader2 className="h-4 w-4 mr-1 animate-spin" />
+                                                        ) : (
+                                                            <Mail className="h-4 w-4 mr-1" />
+                                                        )}
+                                                        Reenviar invitación
+                                                    </Button>
+                                                )}
+                                            </TableCell>
                                         </TableRow>
                                     ))
                                 )}

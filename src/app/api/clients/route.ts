@@ -40,6 +40,24 @@ export async function POST(request: Request) {
             );
         }
 
+        // Check for duplicate client name
+        const supabaseAdminForCheck = getSupabaseAdmin();
+        if (!supabaseAdminForCheck) {
+            return NextResponse.json({ success: false, error: 'Configuración de servidor incompleta.' }, { status: 500 });
+        }
+        const { data: existingByName } = await supabaseAdminForCheck
+            .from('clients')
+            .select('id')
+            .ilike('name', name.trim())
+            .maybeSingle();
+
+        if (existingByName) {
+            return NextResponse.json(
+                { success: false, error: `Ya existe un cliente con el nombre "${name.trim()}".` },
+                { status: 409 }
+            );
+        }
+
         const api_key = generateApiKey();
         let auth_user_id: string | null = null;
 
