@@ -17,6 +17,79 @@ function getRedirectUrl(): string | null {
     return null;
 }
 
+/**
+ * Sends an invitation email using the same flow as client creation:
+ * 1. Try inviteUserByEmail (Supabase's built-in, proven to work)
+ * 2. If fails (user already confirmed), fallback to generateLink + Resend
+ */
+export async function sendInviteEmail(
+    email: string,
+    clientName: string
+): Promise<{ success: boolean; error?: string }> {
+    const supabaseAdmin = getSupabaseAdmin();
+    if (!supabaseAdmin) {
+        return { success: false, error: 'SUPABASE_SERVICE_ROLE_KEY no configurada.' };
+    }
+
+    const redirectUrl = getRedirectUrl();
+    if (!redirectUrl) {
+        return { success: false, error: 'NEXT_PUBLIC_SITE_URL no configurado.' };
+    }
+
+    const redirectTo = `${redirectUrl}/auth/callback?next=/client/update-password`;
+
+    // Method 1: inviteUserByEmail — same as original client creation flow
+    const { error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
+        data: { client_name: clientName },
+        redirectTo
+    });
+
+    if (!inviteError) {
+        console.log(`[invite-email] inviteUserByEmail succeeded for ${email}`);
+        return { success: true };
+    }
+
+    console.warn(`[invite-email] inviteUserByEmail failed: ${inviteError.message}. Trying generateLink + Resend...`);
+
+    // Method 2: generateLink + Resend — fallback for already-confirmed users
+    if (!process.env.RESEND_API_KEY) {
+        return { success: false, error: `inviteUserByEmail falló (${inviteError.message}) y RESEND_API_KEY no está configurada.` };
+    }
+
+    // Try invite type first, then recovery as last resort
+    let actionLink: string | null = null;
+
+    const { data: inviteLinkData, error: inviteLinkError } = await supabaseAdmin.auth.admin.generateLink({
+        type: 'invite',
+        email,
+        options: {
+            data: { client_name: clientName },
+            redirectTo
+        }
+    });
+
+    if (!inviteLinkError && inviteLinkData?.properties?.action_link) {
+        actionLink = inviteLinkData.properties.action_link;
+    } else {
+        console.warn(`[invite-email] generateLink invite failed: ${inviteLinkError?.message}. Trying recovery...`);
+
+        const { data: recoveryData, error: recoveryError } = await supabaseAdmin.auth.admin.generateLink({
+            type: 'recovery',
+            email,
+            options: { redirectTo }
+        });
+
+        if (recoveryError || !recoveryData?.properties?.action_link) {
+            return { success: false, error: `No se pudo generar ningún link: ${recoveryError?.message || 'sin action_link'}` };
+        }
+
+        actionLink = recoveryData.properties.action_link;
+    }
+
+    // Send via Resend with branded template
+    return await sendViaResend(email, clientName, actionLink);
+}
+
 function generateInviteHtml(clientName: string, inviteLink: string): string {
     const siteUrl = getRedirectUrl() || '';
     const logoUrl = `${siteUrl}/logo.jpg`;
@@ -97,83 +170,6 @@ function generateInviteHtml(clientName: string, inviteLink: string): string {
 </html>`;
 }
 
-/**
- * Sends an invitation email to a user using generateLink + Resend.
- * Works for both new and existing auth users.
- */
-export async function sendInviteEmail(
-    email: string,
-    clientName: string
-): Promise<{ success: boolean; error?: string }> {
-    const supabaseAdmin = getSupabaseAdmin();
-    if (!supabaseAdmin) {
-        return { success: false, error: 'SUPABASE_SERVICE_ROLE_KEY no configurada.' };
-    }
-
-    if (!process.env.RESEND_API_KEY) {
-        return { success: false, error: 'RESEND_API_KEY no configurada.' };
-    }
-
-    const redirectUrl = getRedirectUrl();
-    if (!redirectUrl) {
-        return { success: false, error: 'NEXT_PUBLIC_SITE_URL no configurado.' };
-    }
-
-    // Generate invite link (works for both new and existing users)
-    const { data: linkData, error: linkError } = await supabaseAdmin.auth.admin.generateLink({
-        type: 'invite',
-        email,
-        options: {
-            data: { client_name: clientName },
-            redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
-        }
-    });
-
-    if (linkError) {
-        console.error('[invite-email] generateLink error:', linkError.message);
-
-        // If user already confirmed, try recovery link instead
-        if (linkError.message.includes('already been registered') || linkError.message.includes('already confirmed')) {
-            const { data: recoveryData, error: recoveryError } = await supabaseAdmin.auth.admin.generateLink({
-                type: 'recovery',
-                email,
-                options: {
-                    redirectTo: `${redirectUrl}/auth/callback?next=/client/update-password`
-                }
-            });
-
-            if (recoveryError) {
-                console.error('[invite-email] recovery link error:', recoveryError.message);
-                return { success: false, error: `Error generando link: ${recoveryError.message}` };
-            }
-
-            // Build the email verification URL with token
-            const actionLink = buildActionLink(recoveryData, redirectUrl);
-            return await sendViaResend(email, clientName, actionLink);
-        }
-
-        return { success: false, error: `Error generando link: ${linkError.message}` };
-    }
-
-    const actionLink = buildActionLink(linkData, redirectUrl);
-    return await sendViaResend(email, clientName, actionLink);
-}
-
-function buildActionLink(
-    linkData: { properties: { action_link: string; hashed_token: string } },
-    redirectUrl: string
-): string {
-    // The action_link from generateLink points to Supabase's verify endpoint
-    // We need to route it through our auth callback
-    const actionLink = linkData.properties.action_link;
-
-    // If the action_link already contains the right redirect, use it directly
-    if (actionLink) return actionLink;
-
-    // Fallback: build manually from hashed_token
-    return `${redirectUrl}/auth/callback?token_hash=${linkData.properties.hashed_token}&type=invite&next=/client/update-password`;
-}
-
 async function sendViaResend(
     email: string,
     clientName: string,
@@ -197,6 +193,6 @@ async function sendViaResend(
         return { success: false, error: `Error enviando email: ${sendError.message}` };
     }
 
-    console.log(`[invite-email] Invite sent to ${email} for client ${clientName}`);
+    console.log(`[invite-email] Sent via Resend to ${email} for client ${clientName}`);
     return { success: true };
 }
